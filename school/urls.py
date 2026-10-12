@@ -5,6 +5,12 @@ from django.conf.urls.static import static
 from django.http import JsonResponse
 
 
+# --- GLOBAL ADMIN BRANDING FOR ALL USERS ---
+admin.site.site_header = "School Management System Administration"
+admin.site.site_title = "School Admin Portal"
+admin.site.index_title = "Welcome to the School Management Dashboard"
+
+
 def api_welcome(request):
     return JsonResponse(
         {
