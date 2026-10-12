@@ -1,79 +1,10 @@
+from datetime import date, datetime
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from datetime import date, datetime
 from user_agents import parse
 
 from .common_objs import *
-from users.models import CustomUser
-
-
-class Article(models.Model):
-    title = models.CharField(max_length=150, blank=True, null=True)
-    content = models.TextField(blank=True, null=True)
-    picture = models.ImageField(upload_to="articles", blank=True, null=True)
-    created_by = models.ForeignKey(
-        CustomUser, on_delete=models.DO_NOTHING, blank=True, null=True
-    )
-    created_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.title
-
-
-class CarouselImage(models.Model):
-    title = models.CharField(max_length=150, blank=True, null=True)
-    description = models.TextField(blank=True, null=True)
-    picture = models.ImageField(upload_to="carousel")
-
-    def __str__(self):
-        return self.title
-
-
-class AccessLog(models.Model):
-    login = models.ForeignKey(CustomUser, null=True, on_delete=models.SET_NULL)
-    ua = models.CharField(
-        max_length=2000,
-        help_text="User agent. We can use this to determine operating system and browser in use.",
-    )
-    date = models.DateTimeField(
-        auto_now_add=True
-    )  # Set this to add the timestamp on creation only
-    ip = models.GenericIPAddressField()
-    usage = models.CharField(max_length=255)
-
-    def __str__(self):
-        return f"{self.login} - {self.usage} on {self.date}"
-
-    def os(self):
-        """
-        Extract the operating system from the user agent string.
-        Returns 'Unknown' if it cannot be detected.
-        """
-        try:
-            user_agent = parse(self.ua)
-            return user_agent.os.family
-        except Exception as e:
-            print(f"Error extracting OS from UA: {e}")
-            return "Unknown"
-
-    def browser(self):
-        """
-        Extract the browser from the user agent string.
-        Returns 'Unknown' if it cannot be detected.
-        """
-        try:
-            user_agent = parse(self.ua)
-            return user_agent.browser.family
-        except Exception as e:
-            print(f"Error extracting Browser from UA: {e}")
-            return "Unknown"
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["login"]),  # Add index for faster querying by login
-            models.Index(fields=["date"]),  # Add index for faster querying by date
-        ]
 
 
 class School(models.Model):
@@ -103,10 +34,71 @@ class School(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["name"]),  # Index for quick searching by name
-            models.Index(fields=["active"]),  # Index for filtering by active status
+            models.Index(fields=["name"]),
+            models.Index(fields=["active"]),
         ]
-        ordering = ["name"]  # Default ordering by school name
+        ordering = ["name"]
+
+
+class Article(models.Model):
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, related_name="articles", null=True, blank=True
+    )
+    title = models.CharField(max_length=150, blank=True, null=True)
+    content = models.TextField(blank=True, null=True)
+    picture = models.ImageField(upload_to="articles", blank=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.DO_NOTHING, blank=True, null=True
+    )
+    created_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title or "Untitled Article"
+
+
+class CarouselImage(models.Model):
+    title = models.CharField(max_length=150, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    picture = models.ImageField(upload_to="carousel")
+
+    def __str__(self):
+        return self.title or "Carousel Image"
+
+
+class AccessLog(models.Model):
+    login = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    ua = models.CharField(
+        max_length=2000,
+        help_text="User agent. We can use this to determine operating system and browser in use.",
+    )
+    date = models.DateTimeField(auto_now_add=True)
+    ip = models.GenericIPAddressField()
+    usage = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.login} - {self.usage} on {self.date}"
+
+    def os(self):
+        try:
+            user_agent = parse(self.ua)
+            return user_agent.os.family
+        except Exception as e:
+            print(f"Error extracting OS from UA: {e}")
+            return "Unknown"
+
+    def browser(self):
+        try:
+            user_agent = parse(self.ua)
+            return user_agent.browser.family
+        except Exception as e:
+            print(f"Error extracting Browser from UA: {e}")
+            return "Unknown"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["login"]),
+            models.Index(fields=["date"]),
+        ]
 
 
 class Day(models.Model):
@@ -122,26 +114,22 @@ class Day(models.Model):
     day = models.IntegerField(choices=DAY_CHOICES, unique=True)
 
     def __str__(self):
-        return (
-            self.get_day_display()
-        )  # Using get_day_display() to retrieve the display value for the day
+        return self.get_day_display()
 
     class Meta:
         ordering = ("day",)
 
 
 class AcademicYear(models.Model):
-    """
-    A database table row that maps to every academic year.
-    """
-
-    name = models.CharField(max_length=255, unique=True)
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, related_name="academic_years", null=True, blank=True
+    )
+    name = models.CharField(max_length=255)
     start_date = models.DateField()
     end_date = models.DateField(blank=True, null=True)
     active_year = models.BooleanField(
         help_text="DANGER!! This is the current school year. "
-        "There can only be one and setting this will remove it from other years. "
-        "If you want to change the active year, click Admin, Change School Year."
+        "There can only be one active year per school."
     )
 
     class Meta:
@@ -155,28 +143,25 @@ class AcademicYear(models.Model):
         now_ = date.today()
         if self.active_year:
             return "active"
-        elif self.start_date <= now_ <= self.end_date:
+        elif self.end_date and self.start_date <= now_ <= self.end_date:
             return "pending"
-        elif self.start_date > now_ > self.end_date:
+        elif self.end_date and now_ > self.end_date:
             return "ended"
-        return "unknown"  # Fallback in case status doesn't match any condition
+        return "unknown"
 
     def save(self, *args, **kwargs):
-        # Ensure only one active year at a time
         if self.active_year:
-            AcademicYear.objects.exclude(pk=self.pk).update(active_year=False)
-        super(AcademicYear, self).save(*args, **kwargs)
+            # Ensure only one active year per school
+            AcademicYear.objects.filter(school=self.school).exclude(pk=self.pk).update(active_year=False)
+        super().save(*args, **kwargs)
 
     def clean(self):
-        """
-        Add custom validation to ensure the end_date is after start_date if both are provided.
-        """
         if self.end_date and self.start_date > self.end_date:
             raise ValidationError("End date must be after start date.")
 
 
 class Term(models.Model):
-    name = models.CharField(max_length=50)  # e.g., "Term 1", "Term 2"
+    name = models.CharField(max_length=50)
     academic_year = models.ForeignKey(
         AcademicYear, on_delete=models.CASCADE, related_name="terms"
     )
@@ -200,7 +185,7 @@ class SchoolEvent(models.Model):
     ]
 
     term = models.ForeignKey(
-        "Term",
+        Term,
         on_delete=models.CASCADE,
         related_name="events",
         help_text="The term this event belongs to",
