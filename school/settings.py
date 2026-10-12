@@ -31,6 +31,7 @@ DATE_VALIDATORS = [MinValueValidator(date(1970, 1, 1))]  # Unix epoch!
 # Application definition
 
 INSTALLED_APPS = [
+    'jazzmin',
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -145,6 +146,7 @@ STATICFILES_DIRS = [
 ]
 
 STATIC_ROOT = BASE_DIR / "staticfiles"  # final destination after collectstatic
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 MEDIA_ROOT = BASE_DIR / "media"  # uploads
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -189,3 +191,26 @@ AUTH_USER_MODEL = "users.CustomUser"
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
+
+JAZZMIN_SETTINGS = {
+    "site_title": "School Admin Portal",
+    "site_header": "School Management System",
+    "site_brand": "School System",
+    "welcome_sign": "Welcome to the School Management Dashboard",
+    "copyright": "School Management System",
+    
+    # Icons for your apps/models (uses Font Awesome)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "users.customuser": "fas fa-user",
+        "administration.school": "fas fa-school",
+        "academic.classlevel": "fas fa-layer-group",
+        "finance.fee": "fas fa-money-bill-wave",
+    },
+    
+    # Custom UI tweaks
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "related_modal_active": True,
+    "theme": "default",  # You can change to 'darkly', 'slate', etc.
+}
