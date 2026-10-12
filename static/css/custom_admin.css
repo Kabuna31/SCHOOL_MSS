@@ -1,76 +1,81 @@
 /* ==========================================================================
-   Jazzmin navbar customisation
-   Save as: static/css/custom_admin.css
+   Jazzmin Custom Navbar & Menu Styling
    ========================================================================== */
 
-/* --- 0. Font Awesome fallback ---------------------------------------------
-   Loads the icon fonts from a CDN so icons show even if the static font
-   files fail to load on the server. Must stay at the top of the file. */
-@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
-
-/* --- 1. Make sure Font Awesome icons render in the navbar -----------------
-   Lists both FA6 and FA5 so it works whichever version Jazzmin ships. */
-.main-header.navbar i.fas,
-.main-header.navbar i.far,
-.main-header.navbar i.fa-solid,
-.main-header.navbar i.fa-regular {
-    font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
-    display: inline-block;
-    font-style: normal;
-    line-height: 1;
+/* Ensure top navbar lists display horizontally as flex containers */
+.main-header.navbar .navbar-nav {
+    display: flex !important;
+    align-items: center !important;
+    flex-direction: row !important;
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
-.main-header.navbar i.fas,
-.main-header.navbar i.fa-solid {
-    font-weight: 900;
+/* Force visibility and spacing on navbar items */
+.main-header.navbar .navbar-nav .nav-item {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    list-style: none !important;
+    margin-right: 10px !important;
 }
 
-.main-header.navbar i.far,
-.main-header.navbar i.fa-regular {
-    font-weight: 400;
+/* Style top menu links as visible buttons */
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    padding: 6px 12px !important;
+    border-radius: 4px !important;
+    text-decoration: none !important;
 }
 
-/* --- 2. Top menu links (left side): pill-style buttons --------------------
-   Excludes the right-aligned list (ml-auto = Bootstrap 4, ms-auto = Bootstrap 5)
-   so the user menu is not affected. */
-.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) {
-    list-style: none;
-    align-items: center;
-    margin: 0;
-    padding: 0;
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li {
-    list-style: none;
-    margin-right: 10px;
+/* Style top menu icons */
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link i {
+    margin-right: 6px !important;
+    display: inline-block !important;
+    visibility: visible !important;
+    color: #ffffff !important;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li a.nav-link:not([data-widget="pushmenu"]) {
-    display: inline-flex;
-    align-items: center;
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    padding: 6px 12px;
-    border-radius: 4px;
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: background-color 0.15s ease;
+/* Style top-right user profile dropdown and icons */
+.main-header.navbar .navbar-nav.ml-auto .user-menu > a {
+    display: inline-flex !important;
+    align-items: center !important;
+    color: #ffffff !important;
+    padding: 6px 12px !important;
+    text-decoration: none !important;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li a.nav-link:not([data-widget="pushmenu"]):hover {
-    background-color: rgba(255, 255, 255, 0.2);
-    color: #fff;
+.main-header.navbar .navbar-nav.ml-auto .user-menu > a i,
+.main-header.navbar .navbar-nav.ml-auto .user-menu > a img {
+    display: inline-block !important;
+    visibility: visible !important;
+    margin-right: 8px !important;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li a.nav-link i {
-    margin-right: 6px;
-    color: inherit;
+.main-header.navbar .navbar-nav.ml-auto .dropdown-menu {
+    background-color: #2c3e50 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-/* --- 3. User menu (right side): keep the icon visible --------------------- */
-.main-header.navbar .navbar-nav.ml-auto .nav-link i,
-.main-header.navbar .navbar-nav.ms-auto .nav-link i {
-    color: #fff;
-    margin-right: 0;
-    font-size: 1.1rem;
+.main-header.navbar .navbar-nav.ml-auto .dropdown-menu .dropdown-item {
+    color: #ffffff !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 8px 16px !important;
+}
+
+.main-header.navbar .navbar-nav.ml-auto .dropdown-menu .dropdown-item i {
+    display: inline-block !important;
+    visibility: visible !important;
+    margin-right: 10px !important;
+    color: #ffffff !important;
 }
