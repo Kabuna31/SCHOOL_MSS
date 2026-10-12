@@ -179,6 +179,12 @@ JAZZMIN_SETTINGS = {
     # Search model configuration
     "search_model": ["users.customuser", "academic.classlevel"],
 
+    # Top Menu Links
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"], "icon": "fas fa-home"},
+        {"name": "View Live Site", "url": "/", "new_window": True, "icon": "fas fa-globe"},
+    ],
+
     # User Menu
     "usermenu_links": [
         {"name": "Support", "url": "https://github.com/Kabuna31/SCHOOL_SYSTEM", "new_window": True, "icon": "fas fa-question-circle"},
