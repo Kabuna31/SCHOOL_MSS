@@ -185,12 +185,11 @@ JAZZMIN_SETTINGS = {
         {"name": "View Live Site", "url": "/", "new_window": True, "icon": "fas fa-globe"},
     ],
 
-    # User Menu
+   # User Menu
     "usermenu_links": [
         {"name": "Support", "url": "https://github.com/Kabuna31/SCHOOL_SYSTEM", "new_window": True, "icon": "fas fa-question-circle"},
-        {"model": "users.customuser", "icon": "fas fa-user-shield"},
+        {"name": "Users & Profiles", "url": "/admin/users/customuser/", "icon": "fas fa-user-shield"},
     ],
-
     # --- SIDEBAR ICON MAPPING ---
     "icons": {
         "auth": "fas fa-users-cog",
