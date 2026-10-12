@@ -1,22 +1,29 @@
-/* Fix top navbar layout, spacing, and icon visibility */
-.main-header.navbar .navbar-nav {
-    display: flex !important;
-    align-items: center !important;
-    flex-direction: row !important;
-}
-
-.main-header.navbar .navbar-nav .nav-item {
-    margin-right: 8px !important;
-}
-
-.main-header.navbar .navbar-nav .nav-link i,
-.main-header.navbar .navbar-nav .nav-link span {
+/* Force top menu links and icons to be fully visible and styled */
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-item {
     display: inline-block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.main-header.navbar .navbar-nav .nav-link:hover i {
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link {
+    display: flex !important;
+    align-items: center !important;
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    padding: 6px 12px !important;
+    border-radius: 4px !important;
+    margin-right: 8px !important;
+    text-decoration: none !important;
+}
+
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link i {
+    color: #ffffff !important;
+    margin-right: 6px !important;
+    display: inline-block !important;
+    visibility: visible !important;
+}
+
+.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
     color: #ffffff !important;
 }
