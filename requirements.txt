@@ -29,3 +29,4 @@ channels-redis==4.2.0
 daphne==4.1.2
 cloudinary>=1.29.0
 django-cloudinary-storage>=0.3.0
+gunicorn
