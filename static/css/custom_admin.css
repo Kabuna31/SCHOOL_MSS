@@ -1,17 +1,34 @@
-/* Force Jazzmin topmenu container wrapper to display fully */
+/* Clean up and style raw list items generated for topmenu links */
 .main-header.navbar .navbar-nav:not(.ml-auto) {
-    display: -ms-flexbox !important;
+    list-style: none !important;
     display: flex !important;
-    -ms-flex-direction: row !important;
-    flex-direction: row !important;
-    margin-bottom: 0 !important;
+    align-items: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
-/* Ensure every item inside the top menu container is explicitly forced visible */
-.main-header.navbar .navbar-nav:not(.ml-auto) .nav-item,
-.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link {
-    display: inline-block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
+.main-header.navbar .navbar-nav:not(.ml-auto) li {
+    list-style: none !important;
+    margin-right: 10px !important;
+}
+
+.main-header.navbar .navbar-nav:not(.ml-auto) li a {
+    display: inline-flex !important;
+    align-items: center !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    padding: 6px 12px !important;
+    border-radius: 4px !important;
+    text-decoration: none !important;
+    font-size: 0.9rem !important;
+}
+
+.main-header.navbar .navbar-nav:not(.ml-auto) li a:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+}
+
+.main-header.navbar .navbar-nav:not(.ml-auto) li a i {
+    margin-right: 6px !important;
     color: #ffffff !important;
 }
