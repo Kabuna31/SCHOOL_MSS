@@ -1,34 +1,34 @@
-/* Clean up and style raw list items generated for topmenu links */
+/* Top menu links: pill-style buttons in the navbar */
 .main-header.navbar .navbar-nav:not(.ml-auto) {
-    list-style: none !important;
-    display: flex !important;
-    align-items: center !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    list-style: none;
+    align-items: center;
+    margin: 0;
+    padding: 0;
 }
 
 .main-header.navbar .navbar-nav:not(.ml-auto) li {
-    list-style: none !important;
-    margin-right: 10px !important;
+    list-style: none;
+    margin-right: 10px;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) li a {
-    display: inline-flex !important;
-    align-items: center !important;
-    background-color: rgba(255, 255, 255, 0.1) !important;
-    color: #ffffff !important;
-    padding: 6px 12px !important;
-    border-radius: 4px !important;
-    text-decoration: none !important;
-    font-size: 0.9rem !important;
+.main-header.navbar .navbar-nav:not(.ml-auto) li a:not([data-widget="pushmenu"]) {
+    display: inline-flex;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background-color 0.15s ease;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) li a:hover {
-    background-color: rgba(255, 255, 255, 0.2) !important;
-    color: #ffffff !important;
+.main-header.navbar .navbar-nav:not(.ml-auto) li a:not([data-widget="pushmenu"]):hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
 }
 
 .main-header.navbar .navbar-nav:not(.ml-auto) li a i {
-    margin-right: 6px !important;
-    color: #ffffff !important;
+    margin-right: 6px;
+    color: inherit;
 }

@@ -1,8 +1,9 @@
 import os
+from datetime import timedelta, date
+from pathlib import Path
+
 import dj_database_url
 import environ
-from pathlib import Path
-from datetime import timedelta, date
 from django.core.validators import MinValueValidator
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -11,21 +12,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
-# Quick-start development settings - unsuitable for production
-SECRET_KEY = env(
-    "SECRET_KEY", default="2_5ub5rqi!%3v#xk$0e4z-jg22zg_$ejz&t3s0g$5lt*vvu!b@"
-)
+# ---------------------------------------------------------------------------
+# Core security settings
+# ---------------------------------------------------------------------------
+# No default: the app must fail loudly if SECRET_KEY is missing.
+SECRET_KEY = env("SECRET_KEY")
 
-DEBUG = env.bool("DEBUG", default=True)
+# Safe default: set DEBUG=True explicitly in your local .env only.
+DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
+# Needed if your frontend posts to Django (e.g. admin) from another domain.
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
 DATE_VALIDATORS = [MinValueValidator(date(1970, 1, 1))]
 
+# ---------------------------------------------------------------------------
 # Application definition
-
+# ---------------------------------------------------------------------------
 INSTALLED_APPS = [
-    'jazzmin',
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -49,10 +56,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "api.middleware.CustomExceptionMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "api.middleware.CustomExceptionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -81,39 +88,39 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "school.wsgi.application"
 
+# ---------------------------------------------------------------------------
 # Database
+# ---------------------------------------------------------------------------
+# SSL is required in production (Render) but not for a local Postgres.
 DATABASES = {
-    'default': dj_database_url.config(
-        default=env('DATABASE_URL'),
+    "default": dj_database_url.parse(
+        env("DATABASE_URL"),
         conn_max_age=600,
-        ssl_require=True
+        ssl_require=not DEBUG,
     )
 }
 
+# ---------------------------------------------------------------------------
 # Password validation
+# ---------------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# ---------------------------------------------------------------------------
 # Internationalization
+# ---------------------------------------------------------------------------
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = "Africa/Kampala"
 USE_I18N = True
-USE_L10N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# ---------------------------------------------------------------------------
+# Static and media files
+# ---------------------------------------------------------------------------
 STATIC_URL = "/static/"
 MEDIA_URL = "/media/"
 
@@ -123,13 +130,30 @@ STATICFILES_DIRS = [
 ]
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# NOTE: Render's disk is ephemeral, so files in MEDIA_ROOT are lost on every
+# redeploy. Move uploads to S3, Cloudinary or similar before real use.
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Requires Django 4.2+. (Replaces the deprecated STATICFILES_STORAGE setting.)
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# ---------------------------------------------------------------------------
+# Django REST Framework + JWT
+# ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    # Locked down by default. Public views (e.g. login) must opt in with
+    # permission_classes = [AllowAny].
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
@@ -137,10 +161,10 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": True,
+    "BLACKLIST_AFTER_ROTATION": False,
     "UPDATE_LAST_LOGIN": False,
     "ALGORITHM": "HS256",
     "VERIFYING_KEY": None,
@@ -158,7 +182,13 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+# Open only in local development. In production, set CORS_ALLOWED_ORIGINS,
+# e.g. CORS_ALLOWED_ORIGINS=https://school.example.com,https://www.example.com
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 
 AUTH_USER_MODEL = "users.CustomUser"
 
@@ -166,7 +196,20 @@ INTERNAL_IPS = [
     "127.0.0.1",
 ]
 
-# --- JAZZMIN CONFIGURATION ---
+# ---------------------------------------------------------------------------
+# Production security (only when DEBUG is False)
+# ---------------------------------------------------------------------------
+if not DEBUG:
+    # Render terminates SSL at its proxy; without this header setting the
+    # redirect below loops forever.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+# ---------------------------------------------------------------------------
+# Jazzmin configuration
+# ---------------------------------------------------------------------------
 JAZZMIN_SETTINGS = {
     # Title & Branding
     "site_title": "School Management Portal",
@@ -175,11 +218,11 @@ JAZZMIN_SETTINGS = {
     "site_logo": None,
     "welcome_sign": "Welcome back, Administrator!",
     "copyright": "School Management System",
-    
+
     # Search model configuration
     "search_model": ["users.customuser", "academic.classlevel"],
 
-    # Top Menu Links (Explicit paths test)
+    # Top Menu Links
     "topmenu_links": [
         {"name": "Home", "url": "/admin/", "icon": "fas fa-home"},
         {"name": "View Live Site", "url": "/", "new_window": True, "icon": "fas fa-globe"},
@@ -187,10 +230,16 @@ JAZZMIN_SETTINGS = {
 
     # User Menu
     "usermenu_links": [
-        {"name": "Support", "url": "https://github.com/Kabuna31/SCHOOL_SYSTEM", "new_window": True, "icon": "fas fa-question-circle"},
+        {
+            "name": "Support",
+            "url": "https://github.com/Kabuna31/SCHOOL_SYSTEM",
+            "new_window": True,
+            "icon": "fas fa-question-circle",
+        },
         {"name": "Profile & Account", "url": "/admin/users/customuser/", "icon": "fas fa-user-shield"},
     ],
-    # --- SIDEBAR ICON MAPPING ---
+
+    # Sidebar icon mapping
     "icons": {
         "auth": "fas fa-users-cog",
         "users.customuser": "fas fa-user-shield",
@@ -223,20 +272,19 @@ JAZZMIN_SETTINGS = {
         "sis.student": "fas fa-user-graduate",
     },
 
-    # UI Tweaks & Layout
+    # UI tweaks & layout
     "show_sidebar": True,
     "navigation_expanded": True,
     "related_modal_active": True,
     "custom_css": "css/custom_admin.css",
     "custom_js": None,
     "show_ui_builder": False,
-    
-    # UI Theme Options
+
+    # UI theme options
     "theme": "pulse",
     "dark_mode_theme": "darkly",
 }
 
-# Optional UI Customizations for Jazzmin UI Builder
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
