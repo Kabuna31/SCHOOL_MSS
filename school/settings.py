@@ -179,9 +179,9 @@ JAZZMIN_SETTINGS = {
     # Search model configuration
     "search_model": ["users.customuser", "academic.classlevel"],
 
-    # Top Menu Links
+    # Top Menu Links (Explicit paths test)
     "topmenu_links": [
-        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"], "icon": "fas fa-home"},
+        {"name": "Home", "url": "/admin/", "icon": "fas fa-home"},
         {"name": "View Live Site", "url": "/", "new_window": True, "icon": "fas fa-globe"},
     ],
 
