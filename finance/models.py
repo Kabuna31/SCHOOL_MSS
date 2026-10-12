@@ -2,7 +2,8 @@ from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
-from administration.models import Term
+from administration.models import Term, School
+from administration.managers import SchoolScopedManager
 from users.models import Accountant, CustomUser as User
 from academic.models import Teacher, Student
 
@@ -23,6 +24,7 @@ class PaymentThrough(models.TextChoices):
 
 
 class DebtRecord(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="debt_records")
     student = models.ForeignKey(
         Student, related_name="debt_records", on_delete=models.CASCADE
     )
@@ -38,8 +40,13 @@ class DebtRecord(models.Model):
     is_reversed = models.BooleanField(default=False)
     reversed_on = models.DateTimeField(null=True, blank=True)
 
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
+
     class Meta:
-        unique_together = ("student", "term")
+        constraints = [
+            models.UniqueConstraint(fields=["school", "student", "term"], name="unique_school_student_term_debt")
+        ]
         ordering = ["-date_updated"]
 
     def __str__(self):
@@ -68,23 +75,42 @@ class DebtRecord(models.Model):
 
 
 class ReceiptAllocation(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="receipt_allocations")
     name = models.CharField(max_length=255, null=True)
     abbr = models.CharField(max_length=50, blank=True, null=True)
+
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["school", "name"], name="unique_school_receipt_allocation")
+        ]
 
     def __str__(self):
         return self.name
 
 
 class PaymentAllocation(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="payment_allocations")
     name = models.CharField(max_length=255, null=True)
     abbr = models.CharField(max_length=50, blank=True, null=True)
+
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["school", "name"], name="unique_school_payment_allocation")
+        ]
 
     def __str__(self):
         return self.name
 
 
 class Receipt(models.Model):
-    receipt_number = models.IntegerField(unique=True, blank=True, null=True)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="receipts")
+    receipt_number = models.IntegerField(blank=True, null=True, db_index=True)
     date = models.DateField(auto_now_add=True)
     payer = models.CharField(max_length=255, default="Unknown")
     paid_for = models.ForeignKey(
@@ -104,6 +130,14 @@ class Receipt(models.Model):
     )
     received_by = models.ForeignKey(Accountant, on_delete=models.SET_NULL, null=True)
 
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["school", "receipt_number"], name="unique_school_receipt_number")
+        ]
+
     def __str__(self):
         return f"Receipt {self.receipt_number} | {self.date} | {self.paid_for} | {self.payer}"
 
@@ -112,24 +146,24 @@ class Receipt(models.Model):
             raise ValidationError("Amount must be a positive value.")
 
     def save(self, *args, **kwargs):
-        if not self.receipt_number:
+        if not self.receipt_number and self.school_id:
             with transaction.atomic():
                 last_receipt = (
-                    Receipt.objects.select_for_update()
+                    Receipt.objects.filter(school=self.school)
+                    .select_for_update()
                     .order_by("-receipt_number")
                     .first()
                 )
                 self.receipt_number = (
-                    (last_receipt.receipt_number + 1) if last_receipt else 1
+                    (last_receipt.receipt_number + 1) if last_receipt and last_receipt.receipt_number else 1
                 )
         super().save(*args, **kwargs)
 
-        # Don't apply debt reduction here — move logic to PaymentRecord for full control
-
 
 class Payment(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="school_payments")
     payment_number = models.IntegerField(
-        unique=True, blank=True, null=True, db_index=True
+        blank=True, null=True, db_index=True
     )
     date = models.DateField(auto_now_add=True)
     paid_to = models.CharField(max_length=255, null=True)
@@ -148,6 +182,14 @@ class Payment(models.Model):
     )
     paid_by = models.ForeignKey(Accountant, on_delete=models.SET_NULL, null=True)
 
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["school", "payment_number"], name="unique_school_payment_number")
+        ]
+
     def __str__(self):
         return f"Payment {self.payment_number} | {self.date} | {self.paid_for} | {self.paid_to}"
 
@@ -156,16 +198,22 @@ class Payment(models.Model):
             raise ValidationError("Amount must be a positive value.")
 
     def save(self, *args, **kwargs):
-        if not self.payment_number:
-            last_payment = Payment.objects.order_by("-payment_number").first()
-            self.payment_number = (
-                (last_payment.payment_number + 1) if last_payment else 1
-            )
+        if not self.payment_number and self.school_id:
+            with transaction.atomic():
+                last_payment = (
+                    Payment.objects.filter(school=self.school)
+                    .select_for_update()
+                    .order_by("-payment_number")
+                    .first()
+                )
+                self.payment_number = (
+                    (last_payment.payment_number + 1) if last_payment and last_payment.payment_number else 1
+                )
 
         super().save(*args, **kwargs)
 
     def handle_salary_payment(self):
-        if self.paid_for.name.lower() == "salary":
+        if self.paid_for and self.paid_for.name and self.paid_for.name.lower() == "salary":
             if isinstance(self.paid_to, Teacher) or isinstance(
                 self.paid_to, Accountant
             ):
@@ -175,6 +223,7 @@ class Payment(models.Model):
 
 
 class PaymentRecord(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="payment_records")
     student = models.ForeignKey(
         Student, related_name="payments", on_delete=models.CASCADE
     )
@@ -185,11 +234,14 @@ class PaymentRecord(models.Model):
         "Receipt", related_name="payment_records", on_delete=models.CASCADE
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    method = models.CharField(max_length=50, blank=True, null=True)  # e.g. cash, mpesa
+    method = models.CharField(max_length=50, blank=True, null=True)
     reference = models.CharField(max_length=100, blank=True, null=True)
     paid_on = models.DateTimeField(auto_now_add=True)
     note = models.TextField(blank=True, null=True)
     processed_by = models.ForeignKey(Accountant, on_delete=models.SET_NULL, null=True)
+
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
 
     def save(self, *args, **kwargs):
         if self.amount <= 0:
@@ -197,7 +249,6 @@ class PaymentRecord(models.Model):
         if self.debt_record.balance < self.amount:
             raise ValidationError("Payment exceeds remaining balance for this debt.")
 
-        # Apply payment to debt
         self.debt_record.apply_payment(self.amount)
         super().save(*args, **kwargs)
 

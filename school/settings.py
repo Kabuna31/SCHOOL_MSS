@@ -62,8 +62,10 @@ MIDDLEWARE = [
     "api.middleware.CustomExceptionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    'utils.middleware.CurrentRequestMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    
 ]
 
 ROOT_URLCONF = "school.urls"
