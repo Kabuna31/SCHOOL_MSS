@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
 from administration.common_objs import *
+from administration.models import School  # Import the School model
 from .managers import CustomUserManager
 
 
@@ -20,8 +21,19 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(
         max_length=100, blank=True, null=True, verbose_name="last name"
     )
-    phone_number = models.CharField(blank=True, null=True)
+    phone_number = models.CharField(blank=True, null=True, max_length=150)
     email = models.EmailField(_("email address"), unique=True)
+    
+    # School relationship for multi-tenancy data isolation
+    school = models.ForeignKey(
+        School,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+        verbose_name="School"
+    )
+    
     date_joined = models.DateTimeField(default=timezone.now)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -48,6 +60,14 @@ class Accountant(models.Model):
         related_name="accountant",
         null=True,
         blank=True,
+    )
+    school = models.ForeignKey(
+        School,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accountants",
+        verbose_name="School"
     )
     username = models.CharField(unique=True, max_length=250, blank=True)
     first_name = models.CharField(max_length=300, blank=True)
@@ -84,18 +104,19 @@ class Accountant(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        When an accountant is created, generate a CustomUser instance for login.
+        When an accountant is created, generate a CustomUser instance for login 
+        and sync the school relationship.
         """
-        # Generate unique username
         if not self.username:
             self.username = f"{self.first_name.lower()}{self.last_name.lower()}{get_random_string(4)}"
 
         if not self.user:
-            # Create the user if it doesn't exist
+            # Create the user if it doesn't exist, passing the school reference
             user = CustomUser.objects.create(
                 first_name=self.first_name,
                 last_name=self.last_name,
                 email=self.email,
+                school=self.school,
                 is_accountant=True,
             )
 
@@ -104,22 +125,23 @@ class Accountant(models.Model):
             user.set_password(default_password)
             user.save()
 
-            # Attach the created user to the accountant
             self.user = user
 
             # Add user to "accountant" group
             group, _ = Group.objects.get_or_create(name="accountant")
             user.groups.add(group)
+        else:
+            # Keep user's school synced if accountant's school changes
+            if self.user.school != self.school:
+                self.user.school = self.school
+                self.user.save()
 
         super().save(*args, **kwargs)
 
     def update_unpaid_salary(self):
-        # Update unpaid salary at the start of each month
         current_month = timezone.now().month
         if self.unpaid_salary > 0:
-            self.unpaid_salary += self.salary  # Add salary amount to unpaid salary
+            self.unpaid_salary += self.salary
         else:
-            self.unpaid_salary = (
-                self.salary
-            )  # If unpaid salary is 0, set the first month's salary
+            self.unpaid_salary = self.salary
         self.save()

@@ -9,28 +9,37 @@ class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
     form = CustomUserChangeForm
     model = CustomUser
-    list_display = ('email', 'is_staff', 'is_active', 'is_accountant', 'is_teacher',)
-    list_filter = ('email', 'is_staff', 'is_active', 'is_accountant', 'is_teacher',)
+    list_display = ('email', 'first_name', 'last_name', 'school', 'is_staff', 'is_active', 'is_accountant', 'is_teacher', 'is_parent')
+    list_filter = ('school', 'is_staff', 'is_active', 'is_accountant', 'is_teacher', 'is_parent')
     
-    # Include groups and permissions here
+    # Include school, groups, and permissions here
     fieldsets = (
         (None, {'fields': ('first_name', 'middle_name', 'last_name', 'email', 'password')}),
-        ('Permissions & Roles', {'fields': ('is_staff', 'is_active', 'is_superuser', 'is_accountant', 'is_teacher', 'groups', 'user_permissions')}),
+        ('School Assignment', {'fields': ('school',)}),
+        ('Permissions & Roles', {'fields': ('is_staff', 'is_active', 'is_superuser', 'is_accountant', 'is_teacher', 'is_parent', 'groups', 'user_permissions')}),
     )
     
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('first_name', 'middle_name', 'last_name', 'email', 'password1', 'password2', 'is_staff', 'is_active', 'is_accountant', 'is_teacher', 'groups', 'user_permissions')}
+            'fields': ('first_name', 'middle_name', 'last_name', 'email', 'password1', 'password2', 'school', 'is_staff', 'is_active', 'is_accountant', 'is_teacher', 'is_parent', 'groups', 'user_permissions')}
         ),
     )
     
-    search_fields = ('email',)
+    search_fields = ('email', 'first_name', 'last_name')
     ordering = ('email',)
     
     # Gives you a clean side-by-side selection widget for groups
     filter_horizontal = ('groups', 'user_permissions',)
 
 
+@admin.register(Accountant)
+class AccountantAdmin(admin.ModelAdmin):
+    list_display = ('first_name', 'last_name', 'email', 'school', 'empId', 'salary', 'inactive')
+    list_filter = ('school', 'inactive', 'gender')
+    search_fields = ('first_name', 'last_name', 'email', 'empId', 'tin_number')
+    autocomplete_fields = ('user',)
+    ordering = ('first_name', 'last_name')
+
+
 admin.site.register(CustomUser, CustomUserAdmin)
-admin.site.register(Accountant)
