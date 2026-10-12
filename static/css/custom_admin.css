@@ -1,12 +1,11 @@
-/* Force a user icon inside the top-right account menu header */
-.navbar-nav.ml-auto .user-menu > a::before,
-.user-menu > a::before {
-    content: "\f007" !important; /* FontAwesome user icon code */
-    font-family: "Font Awesome 5 Free", "Font Awesome 6 Free", sans-serif !important;
-    font-weight: 900 !important;
+/* Force immediate display of icons in all dropdown menus and user account links */
+.dropdown-menu .dropdown-item i,
+.user-menu .dropdown-menu a i,
+.navbar-nav .dropdown-menu span i {
     display: inline-block !important;
-    margin-right: 6px !important;
-    font-size: 0.9rem !important;
     visibility: visible !important;
     opacity: 1 !important;
+    width: 20px !important;
+    text-align: center !important;
+    margin-right: 8px !important;
 }
