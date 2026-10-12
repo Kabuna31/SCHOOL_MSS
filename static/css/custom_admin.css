@@ -95,3 +95,16 @@
 }
 #jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link[href="/admin/"]::before { content: "\f015"; }
 #jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link[target="_blank"]::before { content: "\f0ac"; }
+
+/* Theme-aware colours for top links (3.0.5 navbar is light in light mode) */
+#jazzy-navbar .navbar-nav:not(.ms-auto) li a.nav-link {
+    color: inherit !important;
+    background-color: rgba(128, 128, 128, 0.15) !important;
+}
+#jazzy-navbar .navbar-nav:not(.ms-auto) li a.nav-link:hover {
+    background-color: rgba(128, 128, 128, 0.3) !important;
+}
+#jazzy-navbar .navbar-nav:not(.ms-auto) li a.nav-link i,
+#jazzy-navbar .navbar-nav:not(.ms-auto) li a.nav-link::before {
+    color: inherit !important;
+}
