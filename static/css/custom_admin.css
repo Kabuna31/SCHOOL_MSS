@@ -3,6 +3,11 @@
    Save as: static/css/custom_admin.css
    ========================================================================== */
 
+/* --- 0. Font Awesome fallback ---------------------------------------------
+   Loads the icon fonts from a CDN so icons show even if the static font
+   files fail to load on the server. Must stay at the top of the file. */
+@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
+
 /* --- 1. Make sure Font Awesome icons render in the navbar -----------------
    Lists both FA6 and FA5 so it works whichever version Jazzmin ships. */
 .main-header.navbar i.fas,
