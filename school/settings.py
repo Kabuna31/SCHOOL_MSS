@@ -193,6 +193,7 @@ INTERNAL_IPS = [
 ]
 
 JAZZMIN_SETTINGS = {
+    "custom_css": "css/custom_admin.css",
     # Title & Branding
     "site_title": "School Management Portal",
     "site_header": "School Administration",
