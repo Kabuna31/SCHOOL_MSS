@@ -108,3 +108,9 @@
 #jazzy-navbar .navbar-nav:not(.ms-auto) li a.nav-link::before {
     color: inherit !important;
 }
+
+/* Right-hand navbar icons (user menu etc.): follow the theme text colour */
+#jazzy-navbar .navbar-nav.ms-auto > li > a.nav-link,
+#jazzy-navbar .navbar-nav.ms-auto > li > a.nav-link i {
+    color: var(--bs-body-color) !important;
+}
