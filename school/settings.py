@@ -256,7 +256,7 @@ JAZZMIN_SETTINGS = {
     "related_modal_active": True,
     "custom_css": None,
     "custom_js": None,
-    "show_ui_builder": True,  # Enables a live theme switcher widget in the bottom-right corner for admins!
+    "show_ui_builder": False,  # Enables a live theme switcher widget in the bottom-right corner for admins!
     
     # UI Theme Options
     "theme": "pulse",  # Modern, clean Bootstrap theme (or try "flatly", "cosmo", "darkly")
