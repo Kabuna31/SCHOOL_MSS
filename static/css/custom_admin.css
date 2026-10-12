@@ -1,0 +1,9 @@
+/* Force usermenu and topmenu icons to render immediately */
+.navbar-nav .nav-link i, 
+.user-menu .dropdown-item i,
+.user-header i {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin-right: 6px;
+}
