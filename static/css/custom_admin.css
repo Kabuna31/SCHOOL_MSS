@@ -3,7 +3,7 @@
    ========================================================================== */
 
 /* Ensure top navbar lists display horizontally as flex containers */
-.main-header.navbar .navbar-nav {
+#jazzy-navbar .navbar-nav {
     display: flex !important;
     align-items: center !important;
     flex-direction: row !important;
@@ -13,7 +13,7 @@
 }
 
 /* Force visibility and spacing on navbar items */
-.main-header.navbar .navbar-nav .nav-item {
+#jazzy-navbar .navbar-nav .nav-item {
     display: inline-block !important;
     visibility: visible !important;
     opacity: 1 !important;
@@ -22,7 +22,7 @@
 }
 
 /* Style top menu links as visible buttons */
-.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link {
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link {
     display: inline-flex !important;
     align-items: center !important;
     background-color: rgba(255, 255, 255, 0.1) !important;
@@ -32,13 +32,13 @@
     text-decoration: none !important;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link:hover {
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link:hover {
     background-color: rgba(255, 255, 255, 0.2) !important;
     color: #ffffff !important;
 }
 
 /* Style top menu icons */
-.main-header.navbar .navbar-nav:not(.ml-auto) .nav-link i {
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link i {
     margin-right: 6px !important;
     display: inline-block !important;
     visibility: visible !important;
@@ -46,7 +46,7 @@
 }
 
 /* Style top-right user profile dropdown and icons */
-.main-header.navbar .navbar-nav.ml-auto .user-menu > a {
+#jazzy-navbar .navbar-nav.ms-auto .user-menu > a {
     display: inline-flex !important;
     align-items: center !important;
     color: #ffffff !important;
@@ -54,28 +54,44 @@
     text-decoration: none !important;
 }
 
-.main-header.navbar .navbar-nav.ml-auto .user-menu > a i,
-.main-header.navbar .navbar-nav.ml-auto .user-menu > a img {
+#jazzy-navbar .navbar-nav.ms-auto .user-menu > a i,
+#jazzy-navbar .navbar-nav.ms-auto .user-menu > a img {
     display: inline-block !important;
     visibility: visible !important;
     margin-right: 8px !important;
 }
 
-.main-header.navbar .navbar-nav.ml-auto .dropdown-menu {
+#jazzy-navbar .navbar-nav.ms-auto .dropdown-menu {
     background-color: #2c3e50 !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.main-header.navbar .navbar-nav.ml-auto .dropdown-menu .dropdown-item {
+#jazzy-navbar .navbar-nav.ms-auto .dropdown-menu .dropdown-item {
     color: #ffffff !important;
     display: flex !important;
     align-items: center !important;
     padding: 8px 16px !important;
 }
 
-.main-header.navbar .navbar-nav.ml-auto .dropdown-menu .dropdown-item i {
+#jazzy-navbar .navbar-nav.ms-auto .dropdown-menu .dropdown-item i {
     display: inline-block !important;
     visibility: visible !important;
     margin-right: 10px !important;
     color: #ffffff !important;
 }
+
+/* Hamburger button: not a pill */
+#jazzy-navbar .navbar-nav:not(.ms-auto) li a[data-lte-toggle] {
+    background: none;
+    padding: 0.5rem;
+}
+
+/* Top menu icons (Jazzmin does not render the "icon" setting for top links) */
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link[href="/admin/"]::before,
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link[target="_blank"]::before {
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    margin-right: 6px;
+}
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link[href="/admin/"]::before { content: "\f015"; }
+#jazzy-navbar .navbar-nav:not(.ms-auto) .nav-link[target="_blank"]::before { content: "\f0ac"; }

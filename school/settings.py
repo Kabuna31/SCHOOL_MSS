@@ -282,7 +282,7 @@ JAZZMIN_SETTINGS = {
 
     # UI theme options
     "theme": "pulse",
-    "default_theme_mode": "auto",  # "light", "dark" or "auto" (follows the OS); replaces dark_mode_theme in Jazzmin 3.0.3+
+    "default_theme_mode": "auto",
 }
 
 JAZZMIN_UI_TWEAKS = {
