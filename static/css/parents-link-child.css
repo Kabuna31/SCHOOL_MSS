@@ -1,0 +1,8 @@
+.auth-card{max-width:520px;margin:40px auto}
+.auth-card .card{padding:20px;border-radius:10px}
+.form-field+.form-field{margin-top:12px}
+.form-field label{display:block;font-size:.95rem;margin-bottom:6px;color:#333}
+.form-field input,.form-field select,.form-field textarea{width:100%;padding:10px 12px;border:1px solid #dee2e6;border-radius:8px;background:#fff}
+.form-field small{color:#6c757d;display:none}
+.form-field.has-error small{display:block;color:#dc3545}
+.errorlist{margin:6px 0 0;padding-left:18px;color:#dc3545;font-size:.9rem}

@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Chat{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/messaging-conversation.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="chat-shell mt-3">
+  <div class="chat-card shadow-sm" id="chatCard"
+    data-current-user="{{ user.id }}"
+    data-other-user="{{ other_user.id }}"
+    data-other-role="{{ other_user.role|lower }}"
+    data-react-url="{% url 'react_message' %}"
+    data-upload-url="{% url 'upload_direct' other_user.id %}">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        {% if other_user.profile_photo %}
+          <img src="{{ other_user.profile_photo.url }}" class="chat-avatar" alt="avatar">
+        {% else %}
+          <div class="chat-avatar">{{ other_user.get_full_name|default:other_user.username|slice:':1'|upper }}</div>
+        {% endif %}
+        <div class="chat-user-meta">
+          <div class="chat-user-name">{{ other_user.get_full_name|default:other_user.username }}</div>
+          <div class="chat-user-role">{{ other_user.role }}</div>
+        </div>
+      </div>
+      <a href="{% url 'inbox' %}" class="role-btn"><span><i class="bi bi-arrow-left"></i> Back</span></a>
+    </div>
+    <div class="chat-body" id="chatBody">
+      {% if chat_messages %}
+        {% for msg in chat_messages %}
+          {% if msg.sender == user %}
+            <div class="msg-row self" id="msg-{{ msg.id }}" data-mid="{{ msg.id }}">
+              {% if user.profile_photo %}
+                <img src="{{ user.profile_photo.url }}" class="msg-avatar" alt="me">
+              {% else %}
+                <div class="msg-avatar">{{ user.get_full_name|default:user.username|slice:':1'|upper }}</div>
+              {% endif %}
+              <div class="bubble" data-id="{{ msg.id }}">
+                <div class="msg-actions"><button class="more-btn" data-mid="{{ msg.id }}">⋯</button></div>
+                {{ msg.content|linebreaksbr }}
+                {% if msg.file %}<br><a href="{{ msg.file.url }}" download class="attach-chip attach-chip--self">Download</a>{% endif %}
+                {% if msg.reactions.all %}
+                  <div class="react-strip">
+                    {% regroup msg.reactions.all by emoji as emoji_groups %}
+                    {% for g in emoji_groups %}
+                      <span class="react-pill" data-emoji="{{ g.grouper }}">{{ g.grouper }} {{ g.list|length }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <div class="time">{{ msg.timestamp|date:"M d, H:i" }}</div>
+              </div>
+            </div>
+          {% else %}
+            <div class="msg-row other role-{{ msg.sender.role|lower }}" id="msg-{{ msg.id }}" data-mid="{{ msg.id }}">
+              {% if msg.sender.profile_photo %}
+                <img src="{{ msg.sender.profile_photo.url }}" class="msg-avatar" alt="avatar">
+              {% else %}
+                <div class="msg-avatar">{{ msg.sender.get_full_name|default:msg.sender.username|slice:':1'|upper }}</div>
+              {% endif %}
+              <div class="bubble" data-id="{{ msg.id }}">
+                <div class="msg-actions"><button class="more-btn" data-mid="{{ msg.id }}">⋯</button></div>
+                {{ msg.content|linebreaksbr }}
+                {% if msg.file %}<br><a href="{{ msg.file.url }}" download class="attach-chip attach-chip--other">Download</a>{% endif %}
+                {% if msg.reactions.all %}
+                  <div class="react-strip">
+                    {% regroup msg.reactions.all by emoji as emoji_groups_other %}
+                    {% for g in emoji_groups_other %}
+                      <span class="react-pill" data-emoji="{{ g.grouper }}">{{ g.grouper }} {{ g.list|length }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <div class="time">{{ msg.timestamp|date:"M d, H:i" }}</div>
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="empty-chat"><i class="bi bi-chat-left-text"></i>No messages yet</div>
+      {% endif %}
+    </div>
+    <div class="chat-footer">
+      <form method="post" id="chatForm" autocomplete="off" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="chat-input-wrap">
+          <textarea name="content" id="chatInput" class="chat-text" placeholder="Type a message..." required></textarea>
+          <label for="fileInput" class="send-btn add-btn" title="Add attachment">
+            <i class="bi bi-plus-lg"></i>
+            <input type="file" id="fileInput" name="file" accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip" hidden>
+          </label>
+          <button type="submit" class="send-btn"><i class="bi bi-send-fill"></i><span>Send</span></button>
+        </div>
+        <div class="attach-preview" id="attachPreview"></div>
+        <div class="small text-muted ms-1">Enter to send · Shift+Enter for newline · Double-click a bubble to 👍</div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const chatCard = document.getElementById('chatCard');
+  const chatBody = document.getElementById('chatBody');
+  const input = document.getElementById('chatInput');
+  const form = document.getElementById('chatForm');
+  const fileInput = document.getElementById('fileInput');
+  const preview = document.getElementById('attachPreview');
+  const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+  const currentUserId = Number(chatCard.dataset.currentUser || '0');
+  const otherUserId = Number(chatCard.dataset.otherUser || '0');
+  const selfAvatarHtml = `{% if user.profile_photo %}<img src="{{ user.profile_photo.url }}" class="msg-avatar" alt="me">{% else %}<div class="msg-avatar">{{ user.get_full_name|default:user.username|slice:':1'|upper }}</div>{% endif %}`;
+  const otherAvatarHtml = `{% if other_user.profile_photo %}<img src="{{ other_user.profile_photo.url }}" class="msg-avatar" alt="avatar">{% else %}<div class="msg-avatar">{{ other_user.get_full_name|default:other_user.username|slice:':1'|upper }}</div>{% endif %}`;
+  const otherRowClass = `other role-${chatCard.dataset.otherRole || 'user'}`;
+  const reactUrl = chatCard.dataset.reactUrl;
+  const uploadUrl = chatCard.dataset.uploadUrl;
+  const EMOJIS = ['👍', '❤️', '😂', '😮', '😢'];
+  let ws = null;
+  let reconnectTimer = null;
+  let typingCooldown = false;
+  let typingTimeout = null;
+  let currentPicker = null;
+  let loadingOlder = false;
+  let loadingOlderTimeout = null;
+
+  const existingIds = Array.from(document.querySelectorAll('.bubble'))
+    .map(b => Number(b.dataset.id))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  let oldestId = existingIds.length ? existingIds[0] : null;
+
+  function scrollToBottom() {
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+  scrollToBottom();
+
+  const typingBar = document.createElement('div');
+  typingBar.className = 'small text-muted';
+  typingBar.style.margin = '3px 10px';
+  typingBar.style.display = 'none';
+  typingBar.textContent = 'Typing...';
+  chatBody.after(typingBar);
+
+  function sanitize(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  function formatContent(content) {
+    return sanitize(content).replace(/\n/g, '<br>');
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return '';
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function attachmentMarkup(url, isSelf) {
+    if (!url) return '';
+    const cls = isSelf ? 'attach-chip attach-chip--self' : 'attach-chip attach-chip--other';
+    return `<br><a href="${url}" download class="${cls}">Download</a>`;
+  }
+
+  function buildRow(message) {
+    if (!message || !message.id) return null;
+    const mid = Number(message.id);
+    if (document.getElementById(`msg-${mid}`)) return null;
+    const isSelf = Number(message.sender_id) === currentUserId;
+    const row = document.createElement('div');
+    row.className = `msg-row ${isSelf ? 'self' : otherRowClass}`;
+    row.id = `msg-${mid}`;
+    row.dataset.mid = mid.toString();
+    const avatarHtml = isSelf ? selfAvatarHtml : otherAvatarHtml;
+    row.innerHTML = `${avatarHtml}<div class="bubble" data-id="${mid}"><div class="msg-actions"><button class="more-btn" data-mid="${mid}">⋯</button></div>${formatContent(message.content)}${attachmentMarkup(message.file_url, isSelf)}<div class="time">${formatTimestamp(message.timestamp)}</div></div>`;
+    return row;
+  }
+
+  function bindPicker(container, messageId) {
+    closePicker();
+    const picker = document.createElement('div');
+    picker.className = 'reaction-picker';
+    EMOJIS.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = emoji;
+      btn.addEventListener('click', () => {
+        sendReaction(messageId, emoji);
+        closePicker();
+      });
+      picker.appendChild(btn);
+    });
+    container.appendChild(picker);
+    currentPicker = picker;
+    document.addEventListener('mousedown', handleOutsidePicker);
+  }
+
+  function closePicker() {
+    if (!currentPicker) return;
+    currentPicker.remove();
+    currentPicker = null;
+    document.removeEventListener('mousedown', handleOutsidePicker);
+  }
+
+  function handleOutsidePicker(event) {
+    if (currentPicker && !currentPicker.contains(event.target)) {
+      closePicker();
+    }
+  }
+
+  function updateReactionStrip(id, reactions) {
+    const bubble = document.querySelector(`.bubble[data-id="${id}"]`);
+    if (!bubble) return;
+    let strip = bubble.querySelector('.react-strip');
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.className = 'react-strip';
+      bubble.appendChild(strip);
+    }
+    strip.innerHTML = '';
+    reactions.forEach(r => {
+      const pill = document.createElement('span');
+      pill.className = 'react-pill';
+      pill.textContent = `${r.emoji} ${r.count}`;
+      strip.appendChild(pill);
+    });
+  }
+
+  function sendReaction(id, emoji) {
+    const payload = new FormData();
+    payload.append('emoji', emoji);
+    payload.append('type', 'direct');
+    payload.append('id', id);
+    if (!reactUrl) return;
+    fetch(reactUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: payload,
+    }).then(r => r.json()).then(data => {
+      if (data.reactions) updateReactionStrip(id, data.reactions);
+    });
+  }
+
+  function bindActions(scope) {
+    scope.querySelectorAll('.more-btn').forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', event => {
+        event.stopPropagation();
+        bindPicker(btn.parentElement, btn.dataset.mid);
+      });
+    });
+  }
+  bindActions(chatBody);
+
+  document.addEventListener('dblclick', event => {
+    const bubble = event.target.closest('.bubble');
+    if (!bubble) return;
+    sendReaction(bubble.dataset.id, '👍');
+  });
+
+  const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsUrl = `${wsScheme}://${location.host}/ws/chat/${otherUserId}/`;
+
+  function canUseWebSocket() {
+    return ws && ws.readyState === WebSocket.OPEN;
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectWebSocket();
+    }, 1500);
+  }
+
+  function handleMessage(event) {
+    const data = JSON.parse(event.data);
+    if (data.type === 'init' && Array.isArray(data.messages)) {
+      data.messages.forEach(msg => appendMessage(msg, false));
+    } else if (data.type === 'new') {
+      appendMessage(data.message, true);
+    } else if (data.type === 'older') {
+      prependOlder(data.messages);
+    } else if (data.type === 'typing') {
+      typingBar.style.display = 'block';
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        typingBar.style.display = 'none';
+      }, 1400);
+    } else if (data.type === 'reaction') {
+      updateReactionStrip(data.message_id, data.reactions || []);
+    }
+  }
+
+  function appendMessage(message, autoscroll = false) {
+    const row = buildRow(message);
+    if (!row) return;
+    chatBody.appendChild(row);
+    bindActions(row);
+    oldestId = oldestId === null ? Number(message.id) : Math.min(oldestId, Number(message.id));
+    if (autoscroll) scrollToBottom();
+  }
+
+  function prependOlder(messages) {
+    if (!messages || !messages.length) {
+      loadingOlder = false;
+      return;
+    }
+    const prevHeight = chatBody.scrollHeight;
+    messages.forEach(message => {
+      const row = buildRow(message);
+      if (!row) return;
+      chatBody.insertBefore(row, chatBody.firstChild);
+      bindActions(row);
+      oldestId = oldestId === null ? Number(message.id) : Math.min(oldestId, Number(message.id));
+    });
+    chatBody.scrollTop = chatBody.scrollHeight - prevHeight;
+    loadingOlder = false;
+    if (loadingOlderTimeout) {
+      clearTimeout(loadingOlderTimeout);
+      loadingOlderTimeout = null;
+    }
+  }
+
+  function connectWebSocket() {
+    ws = new WebSocket(wsUrl);
+    ws.onmessage = handleMessage;
+    ws.onopen = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+    ws.onclose = scheduleReconnect;
+    ws.onerror = scheduleReconnect;
+  }
+
+  connectWebSocket();
+
+  function postMessageAjax(text, file = null) {
+    const payload = new FormData();
+    payload.append('content', text);
+    if (file) payload.append('file', file);
+    if (!uploadUrl) return;
+    fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: payload,
+    }).then(r => r.json()).then(resp => {
+      if (resp && resp.message) appendMessage(resp.message, true);
+      input.value = '';
+      if (fileInput) fileInput.value = '';
+      preview.innerHTML = '';
+      preview.style.display = 'none';
+    }).catch(console.error);
+  }
+
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      if (canUseWebSocket()) {
+        ws.send(JSON.stringify({ action: 'send', content: text }));
+        input.value = '';
+      } else {
+        postMessageAjax(text);
+      }
+    }
+  });
+
+  input.addEventListener('input', () => {
+    if (!typingCooldown && canUseWebSocket()) {
+      ws.send(JSON.stringify({ action: 'typing' }));
+      typingCooldown = true;
+      setTimeout(() => {
+        typingCooldown = false;
+      }, 1000);
+    }
+  });
+
+  chatBody.addEventListener('scroll', () => {
+    if (chatBody.scrollTop < 15 && !loadingOlder && oldestId !== null && canUseWebSocket()) {
+      loadingOlder = true;
+      ws.send(JSON.stringify({ action: 'load_older', before: oldestId }));
+      if (loadingOlderTimeout) clearTimeout(loadingOlderTimeout);
+      loadingOlderTimeout = setTimeout(() => {
+        loadingOlder = false;
+        loadingOlderTimeout = null;
+      }, 4000);
+    }
+  });
+
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const text = input.value.trim();
+    const hasFile = fileInput.files.length > 0;
+    if (!text && !hasFile) return;
+    if (!hasFile && canUseWebSocket()) {
+      ws.send(JSON.stringify({ action: 'send', content: text }));
+      input.value = '';
+      return;
+    }
+    const file = fileInput.files[0] || null;
+    postMessageAjax(text, file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    preview.innerHTML = '';
+    if (!fileInput.files.length) {
+      preview.style.display = 'none';
+      return;
+    }
+    [...fileInput.files].forEach(file => {
+      const chip = document.createElement('div');
+      chip.className = 'attach-chip';
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        chip.appendChild(img);
+      } else {
+        chip.innerHTML = `<i class="bi bi-paperclip"></i> ${file.name.substring(0, 18)}`;
+      }
+      preview.appendChild(chip);
+    });
+    preview.style.display = 'flex';
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Mark Attendance - {{ classroom.name }} {{ classroom.section }}</h2>
+<form method="post">
+  {% csrf_token %}
+  <div class="table-responsive">
+    <table class="table table-modern table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Student</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+      {% for student in students %}
+        <tr>
+          <td>{% include 'partials/user_avatar_name.html' with user_obj=student.user size=34 %}</td>
+          <td>
+            <select name="status_{{ student.id }}" class="form-select">
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+              <option value="late">Late</option>
+            </select>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="d-flex gap-2 mt-4">
+    <button class="role-btn" type="submit"><span><i class="bi bi-save"></i> Save</span></button>
+  {% load dashboard_tags %}
+  <a class="role-btn" href="{% dashboard_url %}" type="button"><span>← Back</span></a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}My Profile{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/accounts-profile.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="profile-wrapper">
+  <div class="profile-card">
+    <h2>My Profile</h2>
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      <div class="avatar-wrapper" id="avatarWrapper" aria-label="Change profile photo" title="Click to change photo">
+        {% if form.instance.profile_photo %}
+          <img src="{{ form.instance.profile_photo.url }}" id="avatarPreview" alt="Profile Photo">
+        {% else %}
+          <div id="avatarPreview" class="avatar-initials">{{ form.instance.get_full_name|default:form.instance.username|slice:":1"|upper }}</div>
+        {% endif %}
+  <div class="avatar-overlay"><i class="bi bi-camera"></i><span>Change Photo</span></div>
+      </div>
+      <input type="file" name="profile_photo" id="id_profile_photo" accept="image/*" hidden>
+      {% if form.profile_photo.errors %}<div class="text-danger small text-center mb-2">{{ form.profile_photo.errors|striptags }}</div>{% endif %}
+      <div class="text-center small text-muted mb-3">JPG / PNG • Max 5MB</div>
+
+      <div class="form-section d-flex flex-column gap-3">
+        <div>
+          <label class="form-label">Username</label>
+          {{ form.username }}
+          {% if form.username.errors %}<div class="text-danger small mt-1">{{ form.username.errors|striptags }}</div>{% endif %}
+        </div>
+        <div>
+          <label class="form-label">Email</label>
+          {{ form.email }}
+          {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|striptags }}</div>{% endif %}
+        </div>
+        <div>
+          <label class="form-label">First name</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}<div class="text-danger small mt-1">{{ form.first_name.errors|striptags }}</div>{% endif %}
+        </div>
+        <div>
+          <label class="form-label">Last name</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<div class="text-danger small mt-1">{{ form.last_name.errors|striptags }}</div>{% endif %}
+        </div>
+        {% if form.phone_number %}
+        <div>
+          <label class="form-label">Mobile Number</label>
+          {{ form.phone_number }}
+          {% if form.phone_number.errors %}<div class="text-danger small mt-1">{{ form.phone_number.errors|striptags }}</div>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="actions">
+        <button class="role-btn" type="submit"><span><i class="bi bi-check2-all"></i> Save</span></button>
+        <a href="{% url 'home' %}" class="role-btn"><span><i class="bi bi-x-lg"></i> Cancel</span></a>
+      </div>
+      <div class="text-center mt-3">
+        <a href="{% url 'change_password' %}" class="btn btn-link">Change Password</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function(){
+    const fileInput = document.getElementById('id_profile_photo');
+    const wrapper = document.getElementById('avatarWrapper');
+    let preview = document.getElementById('avatarPreview');
+
+    if(wrapper && fileInput){
+      wrapper.addEventListener('click', () => fileInput.click());
+      wrapper.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); fileInput.click(); }});
+      fileInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if(!file) return;
+        if(file.size > 5*1024*1024){
+          alert('Image must be 5MB or smaller.');
+          fileInput.value='';
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        if(preview.tagName === 'IMG'){
+          preview.src = url;
+        } else {
+          const img = document.createElement('img');
+          img.id='avatarPreview';
+          img.src=url;
+          img.alt='Profile Photo';
+          wrapper.replaceChild(img, preview);
+          preview = img;
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}

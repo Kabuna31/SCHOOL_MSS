@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Scholaroid - Inbox{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/messaging-inbox.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="inbox-shell mt-3">
+  <div class="inbox-card shadow-sm">
+    <div class="inbox-header">
+      <h1><i class="bi bi-chat-dots-fill me-2"></i>Inbox</h1>
+      <div class="header-actions">
+        <form method="get" action="" class="search-row">
+          <input type="text" name="q" value="{{ search_term }}" placeholder="Search messages" class="search-input">
+          <button class="role-btn search-btn-nowrap" type="submit"><span>Search</span></button>
+        </form>
+        {% if request.user.role == 'teacher' or request.user.role == 'admin' %}
+          <a href="{% url 'create_group' %}" class="role-btn"><span><i class="bi bi-people"></i> New Group</span></a>
+        {% endif %}
+        <a href="{% url dashboard_url_name %}" class="role-btn"><span><i class="bi bi-arrow-left"></i> Back</span></a>
+      </div>
+    </div>
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="direct">Direct</button>
+        <button class="tab-btn" data-tab="groups">Groups</button>
+      </div>
+      <div id="tab-direct" class="tab-panel active">
+  {% if conversations %}
+      <div class="conv-list">
+        {% for u in conversations %}
+          {# Determine unread: unread_count annotation #}
+          <a href="{% url 'conversation' u.id %}" class="conv-item {% if u.unread_count %}unread{% endif %}">
+            {# Avatar #}
+            {% if u.profile_photo %}
+              <img src="{{ u.profile_photo.url }}" alt="avatar" class="conv-avatar">
+            {% else %}
+              <div class="conv-avatar">{{ u.get_full_name|default:u.username|slice:':1'|upper }}</div>
+            {% endif %}
+            <div class="conv-body">
+              <div class="conv-top">
+                <div class="conv-name">{{ u.get_full_name|default:u.username }}</div>
+                <div class="role-chip">{{ u.role }}</div>
+              </div>
+              <div class="conv-preview">
+                {% if u.latest_content %}{{ u.latest_content|truncatechars:70 }}{% else %}<em>No messages yet</em>{% endif %}
+              </div>
+            </div>
+            <div class="conv-meta">
+              <div class="conv-time">{% if u.latest_timestamp %}{{ u.latest_timestamp|date:"M d" }}<br>{{ u.latest_timestamp|date:"H:i" }}{% endif %}</div>
+              {% if u.unread_count %}
+                <div class="unread-dot role-{{ u.role|lower }}" title="{{ u.unread_count }} unread"></div>
+              {% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="inbox-empty">
+        <i class="bi bi-inbox"></i>
+        <p>No conversations yet</p>
+      </div>
+    {% endif %}
+  </div>
+      <div id="tab-groups" class="tab-panel">
+        {% if groups %}
+          <div class="conv-list">
+            {% for g in groups %}
+              <a href="{% url 'group_chat' g.id %}" class="conv-item">
+                <div class="conv-avatar conv-avatar--group">👥</div>
+                <div class="conv-body">
+                  <div class="conv-top">
+                    <div class="conv-name">{{ g.name }}</div>
+                    <div class="role-chip">Group</div>
+                  </div>
+                  <div class="conv-preview">{{ g.messages.last.content|default:'No messages yet'|truncatechars:70 }}</div>
+                </div>
+                <div class="conv-meta">
+                  {% if g.messages.last %}
+                    <div class="conv-time">{{ g.messages.last.timestamp|date:"M d" }}<br>{{ g.messages.last.timestamp|date:"H:i" }}</div>
+                  {% endif %}
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="inbox-empty">
+            <i class="bi bi-people"></i>
+            <p>No groups yet</p>
+          </div>
+        {% endif %}
+      </div>
+      {% if search_term %}
+        <div class="query-results">
+          <h2 class="query-title">Search Results ({{ search_results|length }})</h2>
+          {% if search_results %}
+            <ul class="query-list">
+              {% for r in search_results %}
+                <li class="query-item">
+                  <a class="query-link" href="{% if r.type == 'group' %}{% url 'group_chat' r.group.id %}#msg-{{ r.id }}{% else %}{% url 'conversation' r.other.id %}#msg-{{ r.id }}{% endif %}">
+                    <div class="query-type">
+                      {% if r.type == 'group' %}Group: {{ r.group.name }}{% else %}Direct with {{ r.other.get_full_name|default:r.other.username }}{% endif %}
+                    </div>
+                    <div class="query-body">
+                      <strong>{{ r.sender.get_full_name|default:r.sender.username }}</strong> · {{ r.timestamp|date:"M d H:i" }}<br>
+                      {{ r.content|truncatechars:160 }}
+                      {% if r.file %}<br><span class="query-attach">[Attachment]</span>{% endif %}
+                    </div>
+                  </a>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="query-empty">No matches for "{{ search_term }}".</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+  {% block extra_js %}
+  <script>
+    document.querySelectorAll('.tab-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
+  {% endblock %}

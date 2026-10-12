@@ -1,0 +1,21 @@
+.button { position: relative; max-width: 250px; margin: 0 auto; transition: all 0.3s ease-in-out; box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.2); padding-block: 0.5rem; padding-inline: 1.25rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; border: 3px solid #ffffff4d; outline: none; overflow: hidden; font-size: 15px; cursor: pointer; text-decoration: none; color: black; }
+.btn-admin { background-color: #006bb3; }
+.btn-teacher { background-color: #28a745; }
+.btn-student { background-color: #ffc107; }
+.btn-parent { background-color: #17a2b8; }
+.button:hover { transform: scale(1.05); border-color: #fff9; }
+.button:hover .icon { transform: translate(4px); }
+.button:hover::before { animation: shine 1.5s ease-out infinite; }
+.button::before { content: ""; position: absolute; width: 100px; height: 100%; background-image: linear-gradient(120deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0) 70%); top: 0; left: -100px; opacity: 0.6; }
+@keyframes shine { 0% { left: -100px; } 60% { left: 100%; } to { left: 100%; } }
+.icon { width: 20px; height: 20px; transition: all 0.3s ease-in-out; }
+.btn-glow { display: inline-block; border-radius: 7px; color: black; font-weight: 600; font-family: inherit; font-size: 14px; padding: 0.9em 1.8em; text-decoration: none; cursor: pointer; height: 40px; position: relative; overflow: hidden; width: 10em; text-align: center; transition: 0.3s; }
+.btn-glow span { position: absolute; left: 50%; transform: translateX(-50%); transition: all 0.4s ease; white-space: nowrap; }
+.btn-glow .default-text { opacity: 1; top: 50%; transform: translate(-50%, -50%); }
+.btn-glow .hover-text { opacity: 0; top: 150%; transform: translate(-50%, -50%); }
+.btn-glow:hover .default-text { opacity: 0; top: -50%; }
+.btn-glow:hover .hover-text { opacity: 1; top: 50%; }
+.button-admin { background: #006bb3; box-shadow: 0px 14px 56px -11px #006bb3; }
+.button-teacher { background: #28a745; box-shadow: 0px 14px 56px -11px #28a745; }
+.button-parent { background: #17a2b8; box-shadow: 0px 14px 56px -11px #17a2b8; }
+.button-student { background: #ffc107; box-shadow: 0px 14px 56px -11px #ffc107; }

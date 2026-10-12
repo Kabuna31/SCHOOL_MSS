@@ -1,0 +1,46 @@
+"""
+URL configuration for managementProject project.
+
+The `urlpatterns` list routes URLs to views. For more information please see:
+    https://docs.djangoproject.com/en/5.2/topics/http/urls/
+Examples:
+Function views
+    1. Add an import:  from my_app import views
+    2. Add a URL to urlpatterns:  path('', views.home, name='home')
+Class-based views
+    1. Add an import:  from other_app.views import Home
+    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+Including another URLconf
+    1. Import the include() function: from django.urls import include, path
+    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+"""
+from django.contrib import admin
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+from django.http import HttpResponse
+from accountsApp.views import home
+
+
+def health(request):  # Simple fast health check (HEAD/GET)
+    return HttpResponse("ok", content_type="text/plain")
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('auth/', include('social_django.urls', namespace='social')),
+
+    path('', home, name='home'),
+    path('accounts/', include('accountsApp.urls')),
+    path('students/', include('studentsApp.urls')),
+    path('teachers/', include('teachersApp.urls')),
+    path('parents/', include('parentsApp.urls')),
+    path('classes/', include('classesApp.urls')),
+    path('exams/', include('examsApp.urls')),
+    path('messages/', include('messagingApp.urls')),
+    path('attendance/', include('attendanceApp.urls')),
+    path('resources/', include('resourcesApp.urls')),
+    path('healthz/', health),  # Render / uptime probes
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

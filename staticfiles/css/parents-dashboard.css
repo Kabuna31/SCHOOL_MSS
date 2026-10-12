@@ -1,0 +1,20 @@
+.parent-sidebar { width:240px; background:#fff; border-right:1px solid #e9ecef; position:fixed; top:0; bottom:0; left:-240px; padding-top:60px; transition:all .3s ease; z-index:1040; }
+.parent-sidebar.active { left:0; }
+.parent-sidebar .nav-link { color:#333; padding:12px 20px; display:flex; align-items:center; font-weight:500; }
+.parent-sidebar .nav-link i { margin-right:10px; }
+.parent-sidebar .nav-link.active, .parent-sidebar .nav-link:hover { background:#f1f5f9; color:var(--accent); }
+#parentSidebarToggle { border:none; background:transparent; font-size:1.6rem; cursor:pointer; }
+.p-stat { border-radius:14px; color:#fff; padding:18px 20px; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; box-shadow:0 4px 12px rgba(0,0,0,.12); transition:transform .25s ease, box-shadow .25s ease; }
+.p-stat:hover { transform:translateY(-6px); box-shadow:0 10px 26px rgba(0,0,0,.18); }
+.p-stat .icon { font-size:2.3rem; opacity:.9; }
+.p-stat h3 { margin:0; font-size:2rem; font-weight:700; line-height:1; }
+.p-stat h6 { margin:0; font-size:.75rem; font-weight:600; letter-spacing:.7px; text-transform:uppercase; opacity:.9; }
+.bg-grad-a { background:linear-gradient(45deg,#667eea,#764ba2); }
+.bg-grad-b { background:linear-gradient(45deg,#f093fb,#f5576c); }
+.bg-grad-c { background:linear-gradient(45deg,#4facfe,#00f2fe); }
+.bg-grad-d { background:linear-gradient(45deg,#ff9a44,#fc6076); }
+.section-card { border-radius:14px; border:1px solid #e5e7eb; }
+.section-card .card-header { background:#fff; border-bottom:1px solid #eef0f2; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+.scroll-box { max-height:320px; overflow-y:auto; }
+.table-modern thead { background:linear-gradient(45deg,#1875FF,#4facfe); color:#fff; }
+.child-badge { font-size:.6rem; }

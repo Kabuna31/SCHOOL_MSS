@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Link Child{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/parents-link-child.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <div class="card shadow-sm border-0">
+    <h4 class="auth-title text-center mb-3">Link your child</h4>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% for field in form %}
+        <div class="form-field {% if field.errors %}has-error{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+          {{ field }}
+          {% if field.errors %}
+            <small>{{ field.errors.as_text|striptags }}</small>
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <a href="{% url 'dashboard_parent' %}" class="btn btn-light">Cancel</a>
+          <button type="submit" class="role-btn"><span>Link Child</span></button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

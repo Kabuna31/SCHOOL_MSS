@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/accounts-admin-dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex">
+  <!-- Sidebar -->
+  <div id="sidebar" class="sidebar">
+    <nav class="nav flex-column">
+      <div class="px-3 pt-2 pb-1 text-uppercase small text-muted">Main Menu</div>
+      <a class="nav-link active" href="{% url 'dashboard_admin' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a class="nav-link" href="{% url 'admin_students_list' %}"><i class="bi bi-mortarboard"></i> Students</a>
+      <a class="nav-link" href="{% url 'admin_teachers_list' %}"><i class="bi bi-person-badge"></i> Teachers</a>
+      <a class="nav-link" href="{% url 'admin_classes_list' %}"><i class="bi bi-grid"></i> Classes</a>
+      <a class="nav-link" href="/admin/auth/user/"><i class="bi bi-people"></i> Users</a>
+      <div class="px-3 pt-3 pb-1 text-uppercase small text-muted">Management</div>
+      <a class="nav-link" href="{% url 'admin_exams_list' %}"><i class="bi bi-journal-check"></i> Exams</a>
+      <a class="nav-link" href="{% url 'admin_subjects_list' %}"><i class="bi bi-journal-bookmark"></i> Subjects</a>
+      <a class="nav-link" href="{% url 'notice_list' %}"><i class="bi bi-bell"></i> Notices</a>
+      <a class="nav-link" href="{% url 'inbox' %}"><i class="bi bi-chat-right-dots"></i> Messages</a>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex-grow-1 slide-transition" id="mainContent">
+    <div class="container-fluid mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+          <button id="sidebarToggle"><i class="bi bi-list"></i></button>
+          <h3 class="page-title mb-0">Welcome Admin!</h3>
+        </div>
+      </div>
+
+      <!-- Stat Cards -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <div class="card-stat bg-students position-relative">
+            <div class="icon"><i class="fa-solid fa-user-graduate"></i></div>
+            <div class="info"><h3>{{ student_count|default:0 }}</h3><h6>Total Students</h6></div>
+            <a class="stretched-link" href="{% url 'admin_students_list' %}"></a>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card-stat bg-teachers position-relative">
+            <div class="icon"><i class="fa-solid fa-chalkboard-user"></i></div>
+            <div class="info"><h3>{{ teacher_count|default:0 }}</h3><h6>Total Teachers</h6></div>
+            <a class="stretched-link" href="{% url 'admin_teachers_list' %}"></a>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card-stat bg-classes position-relative">
+            <div class="icon"><i class="fa-solid fa-people-roof"></i></div>
+            <div class="info"><h3>{{ class_count|default:0 }}</h3><h6>Total Classes</h6></div>
+            <a class="stretched-link" href="{% url 'admin_classes_list' %}"></a>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card-stat bg-notices position-relative">
+            <div class="icon"><i class="fa-solid fa-bell"></i></div>
+            <div class="info"><h3>{{ notification_count|default:0 }}</h3><h6>Notices</h6></div>
+            <a class="stretched-link" href="{% url 'notice_list' %}"></a>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-lg-8">
+          <!-- Recent / Upcoming Exams -->
+          <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Upcoming Exams</h5>
+              <div class="d-flex gap-2">
+                  <a href="{% url 'admin_exam_create' %}" class="role-btn"><span>New Exam</span></a>
+                  <a href="{% url 'admin_exams_list' %}" class="role-btn"><span>View All</span></a>
+              </div>
+            </div>
+            <div class="card-body">
+              {% if recent_exams %}
+              <div class="table-responsive">
+                <table class="table table-modern table-hover align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th scope="col">Subject</th>
+                      <th scope="col">Class</th>
+                      <th scope="col">Date</th>
+                      <th scope="col">Max Marks</th>
+                      <th scope="col" class="text-end">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  {% for exam in recent_exams %}
+                    <tr>
+                      <td><span class="fw-semibold">{{ exam.subject.subject }}</span></td>
+                      <td><span class="badge bg-info">{{ exam.class_room.name }}-{{ exam.class_room.section }}</span></td>
+                      <td><small class="text-muted">{{ exam.exam_date|date:"d M Y" }}</small></td>
+                      <td>{{ exam.max_marks }}</td>
+                      <td class="text-end">
+                        <a href="{% url 'admin_exam_edit' exam.pk %}" class="btn btn-sm btn-outline-danger" title="Edit"><i class="bi bi-pencil"></i></a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% else %}
+              <div class="text-center py-4">
+                <i class="bi bi-file-earmark-text fs-1 text-muted"></i>
+                <p class="text-muted mb-0">No upcoming exams</p>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          <!-- Recently Added Students -->
+          <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recently Added Students</h5>
+                    <a href="{% url 'admin_students_list' %}" class="role-btn"><span>View All</span></a>
+                </div>
+                <div class="card-body">
+                {% if recent_students %}
+                    <div class="table-responsive">
+                        <table class="table table-modern table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Class</th>
+                        <th scope="col">Parent</th>
+                        <th scope="col">Admission Date</th>
+                        <th scope="col" class="text-end">Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for student in recent_students %}
+                        <tr>
+                        <td>
+                        {% include 'partials/user_avatar_name.html' with user_obj=student.user size=36 %}
+                        </td>
+                        <td><span class="badge bg-info">{{ student.class_room|default:"-" }}</span></td>
+                        <td>{% if student.parent %}{{ student.parent.user.get_full_name|default:student.parent.user.username }}{% else %}-{% endif %}</td>
+                        <td><small class="text-muted">{{ student.admission_date|date:"d M Y" }}</small></td>
+                        <td class="text-end">
+                        <a href="{% url 'admin_student_detail' student.pk %}" class="btn btn-sm btn-outline-success me-1" title="View"><i class="bi bi-eye"></i></a>
+                        <a href="{% url 'admin_student_edit' student.pk %}" class="btn btn-sm btn-outline-danger" title="Edit"><i class="bi bi-pencil"></i></a>
+                        </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-mortarboard fs-1 text-muted"></i>
+                        <p class="text-muted">No students found</p>
+                        <a href="{% url 'register_student' %}" class="btn btn-primary">Add First Student</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-lg-4">
+          <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Recent Notices</h5>
+                <a href="{% url 'notice_list' %}" class="role-btn"><span>View All</span></a>
+            </div>
+            <div class="card-body activity-box">
+              {% if recent_notifications %}
+                {% for notification in recent_notifications %}
+                <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                  <div>
+                    <strong>{{ notification.title|truncatechars:40 }}</strong><br>
+                    <small class="text-muted">{{ notification.created_at|date:"M d, Y" }}</small>
+                  </div>
+                  <span class="badge bg-secondary">{{ notification.created_at|timesince }} ago</span>
+                </div>
+                {% endfor %}
+              {% else %}
+                <div class="text-center py-4">
+                  <i class="bi bi-bell-slash fs-1 text-muted"></i>
+                  <p class="text-muted">No recent notices</p>
+                  <a href="{% url 'notice_create' %}" class="btn btn-sm btn-primary">Create First Notice</a>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h5 class="mb-0">System Overview</h5></div>
+            <div class="card-body">
+              <div class="d-flex justify-content-between py-2 border-bottom"><span><i class="bi bi-database text-primary"></i> Database Status</span><span class="badge bg-success">Active</span></div>
+              <div class="d-flex justify-content-between py-2 border-bottom"><span><i class="bi bi-server text-info"></i> Server Status</span><span class="badge bg-success">Running</span></div>
+              <div class="d-flex justify-content-between py-2 border-bottom"><span><i class="bi bi-people text-warning"></i> Active Users</span><span class="badge bg-info">{{ active_users|default:0 }}</span></div>
+              <div class="d-flex justify-content-between py-2"><span><i class="bi bi-clock text-secondary"></i> Last Backup</span><span class="badge bg-warning">Today</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('sidebarToggle').addEventListener('click', function(){
+  document.getElementById('sidebar').classList.toggle('active');
+  const mainContent = document.getElementById('mainContent');
+  if(document.getElementById('sidebar').classList.contains('active')){
+    mainContent.style.marginLeft = '240px';
+  } else {
+    mainContent.style.marginLeft = '0';
+  }
+});
+</script>
+{% endblock %}

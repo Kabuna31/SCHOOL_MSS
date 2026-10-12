@@ -1,0 +1,23 @@
+/* Sidebar */
+.sidebar { width: 240px; background: #fff; border-right: 1px solid #e9ecef; position: fixed; top: 0; bottom: 0; left: -240px; transition: all 0.3s ease; z-index: 1050; padding-top: 60px; }
+.sidebar.active { left: 0; }
+.sidebar .nav-link { color: #333; padding: 12px 20px; display: flex; align-items: center; font-weight: 500; }
+.sidebar .nav-link i { margin-right: 10px; }
+.sidebar .nav-link.active { background: #f1f5f9; color: #1875FF; font-weight: 600; }
+#sidebarToggle { border: none; background: transparent; font-size: 1.5rem; cursor: pointer; }
+.card-stat { border-radius: 12px; color: #fff; padding: 20px; display: flex; align-items: center; justify-content: space-between; transition: transform 0.2s ease, box-shadow 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.card-stat:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.15); }
+.card-stat .icon { font-size: 2.5rem; opacity: 0.9; }
+.card-stat .info h3 { font-size: 2.2rem; margin: 0; font-weight: 700; }
+.card-stat .info h6 { margin: 0; font-size: 14px; font-weight: 500; }
+.bg-students { background: linear-gradient(45deg, #667eea, #764ba2); }
+.bg-teachers { background: linear-gradient(45deg, #f093fb, #f5576c); }
+.bg-classes { background: linear-gradient(45deg, #4facfe, #00f2fe); }
+.bg-notices { background: linear-gradient(45deg, #ff9a44, #fc6076); }
+.activity-box { max-height: 350px; overflow-y: auto; }
+.table-modern thead { background: linear-gradient(45deg, #1875FF, #4facfe); color: #fff; font-weight: 600; }
+.table-modern thead th { border: none; padding: 12px; }
+.table-modern tbody tr { transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; }
+.table-modern tbody tr:hover { background-color: #f8faff; box-shadow: 0 4px 10px rgba(0,0,0,0.06); transform: translateY(-2px); }
+.table-modern td { vertical-align: middle; padding: 12px; border-bottom: 1px solid #f1f1f1; }
+.table-modern .avatar-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; }

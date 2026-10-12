@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Teacher Dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/teachers-dashboard.css' %}">
+{% endblock %}
+{% block content %}
+<div class="d-flex">
+  <nav id="teacherSidebar" class="teacher-sidebar">
+    <div class="nav flex-column">
+      <div class="px-3 pt-2 pb-1 text-uppercase small text-muted">Menu</div>
+      <a class="nav-link active" href="{% url 'dashboard_teacher' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a class="nav-link" href="{% url 'inbox' %}"><i class="bi bi-chat-dots"></i> Inbox</a>
+      <a class="nav-link" href=""><i class="bi bi-people"></i> Classes</a>
+      <a class="nav-link" href=""><i class="bi bi-journal"></i> Subjects</a>
+      <a class="nav-link" href="{% url 'teacher_exams_list' %}"><i class="bi bi-journal-check"></i> Exams</a>
+      <a class="nav-link" href="{% url 'notice_list' %}"><i class="bi bi-bell"></i> Notices</a>
+      <a class="nav-link" href="{% url 'teacher_resources' %}"><i class="bi bi-folder"></i> Resources</a>
+    </div>
+  </nav>
+  <div id="teacherMain" class="flex-grow-1 slide-transition">
+    <div class="container-fluid mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+          <button id="teacherSidebarToggle"><i class="bi bi-list"></i></button>
+          <h3 class="mb-0">Welcome {{ teacher.user.first_name }}!</h3>
+        </div>
+      </div>
+      <!-- Stats Row -->
+      <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3"><div class="t-stat bg-grad-a position-relative"><div><h3>{{ stats.classes|default:0 }}</h3><h6>Classes</h6></div><div class="icon"><i class="fa-solid fa-chalkboard"></i></div></div></div>
+        <div class="col-sm-6 col-lg-3"><div class="t-stat bg-grad-b position-relative"><div><h3>{{ stats.subjects|default:0 }}</h3><h6>Subjects</h6></div><div class="icon"><i class="fa-solid fa-book-open"></i></div></div></div>
+        <div class="col-sm-6 col-lg-3"><div class="t-stat bg-grad-c position-relative"><div><h3>{{ stats.students|default:0 }}</h3><h6>Students</h6></div><div class="icon"><i class="fa-solid fa-user-graduate"></i></div></div></div>
+        <div class="col-sm-6 col-lg-3"><div class="t-stat bg-grad-d position-relative"><div><h3>{{ stats.upcoming_exams|default:0 }}</h3><h6>Exams</h6></div><div class="icon"><i class="fa-solid fa-file-pen"></i></div></div></div>
+      </div>
+      <div class="row g-4">
+        <div class="col-xl-4" id="classes">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Your Classes</span></div>
+            <div class="card-body p-0">
+              {% if classes %}
+              <ul class="list-group list-group-flush scroll-box">
+                {% for cls in classes %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-door-open me-1 text-primary"></i>{{ cls.name }} {{ cls.section }}</span>
+                    <a href="{% url 'teacher_class_detail' cls.id %}" class="btn btn-sm btn-outline-primary">Open</a>
+                  </li>
+                {% endfor %}
+              </ul>
+              {% else %}<div class="p-3 text-muted small">No classes assigned.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-4" id="subjects">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Subjects</span></div>
+            <div class="card-body p-0">
+              {% if subjects %}
+                <ul class="list-group list-group-flush scroll-box">
+                  {% for sub in subjects %}<li class="list-group-item"><i class="bi bi-journal-text me-1 text-success"></i>{{ sub.subject }}</li>{% endfor %}
+                </ul>
+              {% else %}<div class="p-3 text-muted small">No subjects yet.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-4" id="exams">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Upcoming Exams</span><a href="{% url 'teacher_exams_list' %}" class="btn btn-sm btn-outline-primary">All</a></div>
+            <div class="card-body p-0">
+              {% if exams %}
+                <ul class="list-group list-group-flush scroll-box">
+                  {% for exam in exams %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                      <div><strong>{{ exam.subject.subject }}</strong><br><small class="text-muted">{{ exam.class_room.name }}-{{ exam.class_room.section }} • {{ exam.exam_date|date:"d M" }}</small></div>
+                      <span class="badge bg-light text-dark border">{{ exam.max_marks }}</span>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}<div class="p-3 text-muted small">No scheduled exams.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row g-4 mt-1">
+        <div class="col-lg-12" id="notices">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Recent Notices</span><a href="{% url 'notice_list' %}" class="btn btn-sm btn-outline-secondary">All</a></div>
+            <div class="card-body p-0">
+              {% if notices %}
+                <ul class="list-group list-group-flush scroll-box">
+                  {% for notice in notices %}
+                    <li class="list-group-item">
+                      <strong>{{ notice.title|truncatechars:40 }}</strong><br>
+                      <small class="text-muted">{{ notice.created_at|date:"d M" }}</small>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}<div class="p-3 text-muted small">No notices.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const tToggle = document.getElementById('teacherSidebarToggle');
+  const tSidebar = document.getElementById('teacherSidebar');
+  const tMain = document.getElementById('teacherMain');
+  tToggle.addEventListener('click',()=>{ tSidebar.classList.toggle('active'); tMain.style.marginLeft = tSidebar.classList.contains('active')? '240px':'0'; });
+</script>
+{% endblock %}

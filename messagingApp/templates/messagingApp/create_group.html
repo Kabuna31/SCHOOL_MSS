@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Create Group{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/messaging-create-group.css' %}">
+{% endblock %}
+{% block content %}
+<div class="cg-shell mt-3">
+  <div class="cg-card shadow-sm">
+    <div class="cg-header">
+      <h1><i class="bi bi-plus-circle"></i> Create Group</h1>
+      <div class="cg-actions">
+        <a href="{% url 'groups' %}" class="role-btn"><span><i class="bi bi-people"></i> Groups</span></a>
+        <a href="{% url 'inbox' %}" class="role-btn"><span><i class="bi bi-chat-dots"></i> Inbox</span></a>
+      </div>
+    </div>
+    <div class="cg-body">
+      <form method="post" autocomplete="off" novalidate>
+        {% csrf_token %}
+        <div class="form-section-title">Basic Info</div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Group Name <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" placeholder="e.g. Grade 8 - Section A Parents" required>
+          <div class="help-text">Pick a clear, recognizable name. For class-linked groups, you can still customize it.</div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-section-title">Class Link (Optional)</div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Attach to Class (auto-manages members)</label>
+          <select name="class_room" class="form-select">
+            <option value="">-- No Class Link --</option>
+            {% for c in classes %}
+              <option value="{{ c.id }}">{{ c.name }} - {{ c.section }}</option>
+            {% endfor %}
+          </select>
+          <div class="help-text">If selected: teachers for the class and parents of enrolled students are added automatically.</div>
+        </div>
+        <div class="mt-4 d-flex gap-3">
+          <button type="submit" class="role-btn"><span><i class="bi bi-check2-circle"></i> Create</span></button>
+          <a href="{% url 'groups' %}" class="role-btn btn-cancel-alt"><span><i class="bi bi-x-circle"></i> Cancel</span></a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

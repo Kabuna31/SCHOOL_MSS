@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}My Exams{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Exams (Your Classes)</h2>
+</div>
+<div class="card p-0">
+  <div class="table-responsive">
+    <table class="table table-modern table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Subject</th><th>Class</th><th>Date</th><th>Max Marks</th></tr>
+      </thead>
+      <tbody>
+        {% now "Y-m-d" as today %}
+        {% for e in object_list %}
+        {% with edate=e.exam_date|date:"Y-m-d" %}
+        <tr>
+          <td>{{ e.subject.subject }}</td>
+          <td>{{ e.class_room.name }}-{{ e.class_room.section }}</td>
+          <td>{{ e.exam_date }}</td>
+          <td>
+            <div class="d-flex align-items-center" style="max-width: 220px;">
+              <span>{{ e.max_marks }}</span>
+              {% if edate == today %}
+                <span class="text-warning fw-semibold ms-auto">Today</span>
+              {% elif edate < today %}
+                <span class="text-danger fw-semibold ms-auto">Finished</span>
+              {% else %}
+                <span class="text-success fw-semibold ms-auto">Upcoming</span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endwith %}
+        {% empty %}
+        <tr><td colspan="4" class="text-center">No exams scheduled.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="d-flex gap-2 mt-4">
+  <a class="role-btn" href="{% url 'dashboard_teacher' %}"><span>← Back</span></a>
+</div>
+{% endblock %}
+

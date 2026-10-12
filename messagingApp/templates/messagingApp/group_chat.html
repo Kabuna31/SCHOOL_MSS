@@ -1,0 +1,423 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Group Chat{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/messaging-group-chat.css' %}">
+{% endblock %}
+{% block content %}
+<div class="gchat-shell mt-3">
+  <div class="gchat-card shadow-sm">
+    <div class="gchat-header">
+      <div class="gchat-header-left">
+        <div class="gchat-icon"><i class="bi bi-people"></i></div>
+        <div>
+          <div class="gchat-title">{{ group.name }}</div>
+          <div class="gchat-sub">{{ group.memberships.count }} members · {{ group.messages.count }} messages</div>
+        </div>
+      </div>
+      <div class="g-header-actions">
+        <a href="{% url 'groups' %}" class="role-btn"><span><i class="bi bi-people"></i> Groups</span></a>
+        <a href="{% url 'inbox' %}" class="role-btn"><span><i class="bi bi-chat-dots"></i> Inbox</span></a>
+      </div>
+    </div>
+    <div class="gchat-body" id="gChatBody">
+      {% if chat_messages %}
+        {% for m in chat_messages %}
+          {% if m.sender == user %}
+            <div class="g-msg-row self" id="msg-{{ m.id }}" data-id="{{ m.id }}">
+              {% if user.profile_photo %}
+                <img src="{{ user.profile_photo.url }}" class="g-avatar" alt="me">
+              {% else %}
+                <div class="g-avatar">{{ user.get_full_name|default:user.username|slice:':1'|upper }}</div>
+              {% endif %}
+              <div class="g-bubble" data-id="{{ m.id }}">
+                <div class="g-msg-actions"><button class="g-more-btn" data-mid="{{ m.id }}">⋯</button></div>
+                {{ m.content|linebreaksbr }}
+                {% if m.file %}<br><a class="g-attach" href="{{ m.file.url }}" download><i class="bi bi-download"></i> Download</a>{% endif %}
+                {% if m.reactions.all %}
+                  <div class="g-react-pills">
+                    {% regroup m.reactions.all by emoji as g_reacts %}
+                    {% for grp in g_reacts %}
+                      <span class="g-react-pill">{{ grp.grouper }} {{ grp.list|length }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <span class="g-meta">{{ m.timestamp|date:"M d, H:i" }}</span>
+              </div>
+            </div>
+          {% else %}
+            <div class="g-msg-row" id="msg-{{ m.id }}" data-id="{{ m.id }}">
+              {% if m.sender.profile_photo %}
+                <img src="{{ m.sender.profile_photo.url }}" class="g-avatar" alt="avatar">
+              {% else %}
+                <div class="g-avatar">{{ m.sender.get_full_name|default:m.sender.username|slice:':1'|upper }}</div>
+              {% endif %}
+              <div class="g-bubble" data-id="{{ m.id }}">
+                <div class="g-msg-actions"><button class="g-more-btn" data-mid="{{ m.id }}">⋯</button></div>
+                <strong class="g-sender-name">{{ m.sender.get_full_name|default:m.sender.username }}</strong>
+                {{ m.content|linebreaksbr }}
+                {% if m.file %}<br><a class="g-attach" href="{{ m.file.url }}" download><i class="bi bi-download"></i> Download</a>{% endif %}
+                {% if m.reactions.all %}
+                  <div class="g-react-pills">
+                    {% regroup m.reactions.all by emoji as g_reacts_other %}
+                    {% for grp in g_reacts_other %}
+                      <span class="g-react-pill">{{ grp.grouper }} {{ grp.list|length }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <span class="g-meta">{{ m.timestamp|date:"M d, H:i" }}</span>
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="empty-group"><i class="bi bi-chat-square-dots"></i>No messages yet</div>
+      {% endif %}
+    </div>
+    <div class="gchat-footer">
+      <form method="post" enctype="multipart/form-data" id="gChatForm" autocomplete="off">
+        {% csrf_token %}
+        <div class="g-input-wrap">
+          <textarea name="content" class="g-text" id="gText" placeholder="Type a message..." required></textarea>
+          <label for="gFileInput" class="g-send-btn g-add-btn" title="Add attachment">
+            <i class="bi bi-plus-lg"></i>
+            <input type="file" id="gFileInput" name="file" accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip" hidden>
+          </label>
+          <button type="submit" class="g-send-btn"><i class="bi bi-send-fill"></i><span>Send</span></button>
+        </div>
+        <div class="g-attach-preview" id="gAttachPreview"></div>
+        <div class="g-schedule">Press Enter to send • Shift+Enter for newline • Double-tap/Double-click a bubble to 👍</div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  const gChatBody = document.getElementById('gChatBody');
+  const gText = document.getElementById('gText');
+  const gForm = document.getElementById('gChatForm');
+  const gFileInput = document.getElementById('gFileInput');
+  const gPreview = document.getElementById('gAttachPreview');
+  const csrfToken = '{{ csrf_token }}';
+  const currentUserId = {{ user.id }};
+  const groupId = {{ group.id }};
+  const selfAvatarHtml = `{% if user.profile_photo %}<img src="{{ user.profile_photo.url }}" class="g-avatar" alt="me">{% else %}<div class="g-avatar">{{ user.get_full_name|default:user.username|slice:':1'|upper }}</div>{% endif %}`;
+  const G_EMOJIS = ['👍','❤️','😂','😮','😢'];
+  let gWs = null;
+  let gReconnectTimer = null;
+  let gTypingCooldown = false;
+  let gTypingTimeout = null;
+  let gPicker = null;
+  let gLoading = false;
+  let gLoadingTimeout = null;
+
+  const existingIds = Array.from(document.querySelectorAll('.g-bubble'))
+    .map(b => Number(b.dataset.id))
+    .filter(n => !Number.isNaN(n))
+    .sort((a, b) => a - b);
+  let gOldestId = existingIds.length ? existingIds[0] : null;
+
+  function scrollBottom() {
+    gChatBody.scrollTop = gChatBody.scrollHeight;
+  }
+  scrollBottom();
+
+  const gTyping = document.createElement('div');
+  gTyping.className = 'small text-muted';
+  gTyping.style.margin = '3px 12px';
+  gTyping.style.display = 'none';
+  gTyping.textContent = 'Someone typing...';
+  gChatBody.after(gTyping);
+
+  function sanitize(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  function formatContent(content) {
+    return sanitize(content).replace(/\n/g, '<br>');
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return '';
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function attachmentMarkup(url) {
+    if (!url) return '';
+    return `<br><a class="g-attach" href="${url}" download><i class="bi bi-download"></i> Download</a>`;
+  }
+
+  function memberAvatar(name, hasPhoto, photoUrl) {
+    if (hasPhoto && photoUrl) {
+      return `<img src="${photoUrl}" class="g-avatar" alt="avatar">`;
+    }
+    const letter = (name || '?').trim().charAt(0).toUpperCase() || '?';
+    return `<div class="g-avatar">${letter}</div>`;
+  }
+
+  function buildRow(message) {
+    if (!message || !message.id) return null;
+    const mid = Number(message.id);
+    if (document.getElementById(`msg-${mid}`)) return null;
+    const isSelf = Number(message.sender_id) === currentUserId;
+    const row = document.createElement('div');
+    row.className = `g-msg-row ${isSelf ? 'self' : ''}`;
+    row.id = `msg-${mid}`;
+    row.dataset.id = mid.toString();
+    const avatarHtml = isSelf ? selfAvatarHtml : memberAvatar(message.sender_name, message.sender_has_photo, message.sender_photo_url);
+    const namePrefix = isSelf ? '' : `<strong class="g-sender-name">${sanitize(message.sender_name)}</strong>`;
+    row.innerHTML = `${avatarHtml}<div class="g-bubble" data-id="${mid}"><div class="g-msg-actions"><button class="g-more-btn" data-mid="${mid}">⋯</button></div>${namePrefix}${formatContent(message.content)}${attachmentMarkup(message.file_url)}<span class="g-meta">${formatTimestamp(message.timestamp)}</span></div>`;
+    return row;
+  }
+
+  function updateReactionStrip(id, reactions) {
+    const bubble = document.querySelector(`.g-bubble[data-id="${id}"]`);
+    if (!bubble) return;
+    let strip = bubble.querySelector('.g-react-pills');
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.className = 'g-react-pills';
+      bubble.appendChild(strip);
+    }
+    strip.innerHTML = '';
+    reactions.forEach(r => {
+      const pill = document.createElement('span');
+      pill.className = 'g-react-pill';
+      pill.textContent = `${r.emoji} ${r.count}`;
+      strip.appendChild(pill);
+    });
+  }
+
+  function sendReaction(id, emoji) {
+    const payload = new FormData();
+    payload.append('emoji', emoji);
+    payload.append('type', 'group');
+    payload.append('id', id);
+    fetch('{% url 'react_message' %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: payload
+    }).then(r => r.json()).then(data => {
+      if (data.reactions) updateReactionStrip(id, data.reactions);
+    });
+  }
+
+  function openPicker(container, mid) {
+    closePicker();
+    const picker = document.createElement('div');
+    picker.className = 'g-reaction-picker';
+    G_EMOJIS.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = emoji;
+      btn.addEventListener('click', () => {
+        sendReaction(mid, emoji);
+        closePicker();
+      });
+      picker.appendChild(btn);
+    });
+    container.appendChild(picker);
+    gPicker = picker;
+    document.addEventListener('mousedown', handlePickerOutside);
+  }
+
+  function closePicker() {
+    if (gPicker) {
+      gPicker.remove();
+      gPicker = null;
+      document.removeEventListener('mousedown', handlePickerOutside);
+    }
+  }
+
+  function handlePickerOutside(event) {
+    if (gPicker && !gPicker.contains(event.target)) closePicker();
+  }
+
+  function appendMessage(message, autoscroll) {
+    const row = buildRow(message);
+    if (!row) return;
+    gChatBody.appendChild(row);
+    bindRowActions(row);
+    gOldestId = gOldestId === null ? Number(message.id) : Math.min(gOldestId, Number(message.id));
+    if (autoscroll) scrollBottom();
+  }
+
+  function prependMessages(messages) {
+    if (!messages || !messages.length) {
+      gLoading = false;
+      return;
+    }
+    const prevHeight = gChatBody.scrollHeight;
+    messages.forEach(message => {
+      const row = buildRow(message);
+      if (!row) return;
+      gChatBody.insertBefore(row, gChatBody.firstChild);
+      bindRowActions(row);
+      gOldestId = gOldestId === null ? Number(message.id) : Math.min(gOldestId, Number(message.id));
+    });
+    gChatBody.scrollTop = gChatBody.scrollHeight - prevHeight;
+    gLoading = false;
+    if (gLoadingTimeout) {
+      clearTimeout(gLoadingTimeout);
+      gLoadingTimeout = null;
+    }
+  }
+
+  function bindRowActions(scope) {
+    scope.querySelectorAll('.g-more-btn').forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', event => {
+        event.stopPropagation();
+        openPicker(btn.parentElement, btn.dataset.mid);
+      });
+    });
+  }
+  bindRowActions(document);
+
+  document.addEventListener('dblclick', event => {
+    const bubble = event.target.closest('.g-bubble');
+    if (!bubble) return;
+    sendReaction(bubble.dataset.id, '👍');
+  });
+
+  const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const gWsUrl = `${wsScheme}://${location.host}/ws/group/${groupId}/`;
+
+  function canUseWebSocket() {
+    return gWs && gWs.readyState === WebSocket.OPEN;
+  }
+
+  function scheduleReconnect() {
+    if (gReconnectTimer) return;
+    gReconnectTimer = setTimeout(() => {
+      gReconnectTimer = null;
+      connectWs();
+    }, 1500);
+  }
+
+  function handleWsMessage(event) {
+    const data = JSON.parse(event.data);
+    if (data.type === 'init' && Array.isArray(data.messages)) {
+      data.messages.forEach(msg => appendMessage(msg, false));
+    } else if (data.type === 'new') {
+      appendMessage(data.message, true);
+    } else if (data.type === 'older') {
+      prependMessages(data.messages);
+    } else if (data.type === 'typing') {
+      gTyping.style.display = 'block';
+      if (gTypingTimeout) clearTimeout(gTypingTimeout);
+      gTypingTimeout = setTimeout(() => { gTyping.style.display = 'none'; }, 1400);
+    } else if (data.type === 'reaction') {
+      updateReactionStrip(data.message_id, data.reactions || []);
+    }
+  }
+
+  function connectWs() {
+    gWs = new WebSocket(gWsUrl);
+    gWs.onmessage = handleWsMessage;
+    gWs.onopen = () => {
+      if (gReconnectTimer) {
+        clearTimeout(gReconnectTimer);
+        gReconnectTimer = null;
+      }
+    };
+    gWs.onclose = scheduleReconnect;
+    gWs.onerror = scheduleReconnect;
+  }
+
+  connectWs();
+
+  function postGroupMessageAjax(text, file = null) {
+    const payload = new FormData();
+    payload.append('content', text);
+    if (file) payload.append('file', file);
+    fetch('{% url 'upload_group' group.id %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: payload
+    }).then(r => r.json()).then(resp => {
+      if (resp && resp.message) appendMessage(resp.message, true);
+      gText.value = '';
+      if (gFileInput) gFileInput.value = '';
+      gPreview.innerHTML = '';
+      gPreview.style.display = 'none';
+    }).catch(console.error);
+  }
+
+  gText.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      const txt = gText.value.trim();
+      if (!txt) return;
+      if (canUseWebSocket()) {
+        gWs.send(JSON.stringify({ action: 'send', content: txt }));
+        gText.value = '';
+      } else {
+        postGroupMessageAjax(txt);
+      }
+    }
+  });
+
+  gText.addEventListener('input', () => {
+    if (!gTypingCooldown && canUseWebSocket()) {
+      gWs.send(JSON.stringify({ action: 'typing' }));
+      gTypingCooldown = true;
+      setTimeout(() => { gTypingCooldown = false; }, 1000);
+    }
+  });
+
+  gChatBody.addEventListener('scroll', () => {
+    if (gChatBody.scrollTop < 15 && !gLoading && gOldestId !== null && canUseWebSocket()) {
+      gLoading = true;
+      gWs.send(JSON.stringify({ action: 'load_older', before: gOldestId }));
+      if (gLoadingTimeout) clearTimeout(gLoadingTimeout);
+      gLoadingTimeout = setTimeout(() => {
+        gLoading = false;
+        gLoadingTimeout = null;
+      }, 4000);
+    }
+  });
+
+  gForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const text = gText.value.trim();
+    const hasFile = gFileInput.files.length > 0;
+    if (!text && !hasFile) return;
+    if (!hasFile && canUseWebSocket()) {
+      gWs.send(JSON.stringify({ action: 'send', content: text }));
+      gText.value = '';
+      return;
+    }
+    const file = gFileInput.files[0] || null;
+    postGroupMessageAjax(text, file);
+  });
+
+  gFileInput.addEventListener('change', () => {
+    gPreview.innerHTML = '';
+    if (!gFileInput.files.length) {
+      gPreview.style.display = 'none';
+      return;
+    }
+    [...gFileInput.files].forEach(file => {
+      const chip = document.createElement('div');
+      chip.className = 'g-attach-chip';
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (['png','jpg','jpeg','gif','webp','bmp'].includes(ext)) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        chip.appendChild(img);
+      } else {
+        chip.innerHTML = `<i class="bi bi-paperclip"></i> ${file.name.substring(0,18)}`;
+      }
+      gPreview.appendChild(chip);
+    });
+    gPreview.style.display = 'flex';
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: school-management-web
+    env: python
+    plan: free
+    buildCommand: "./render-build.sh"
+    startCommand: "./render-start.sh"
+    autoDeploy: true
+    healthCheckPath: "/"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: ALLOWED_HOSTS
+        value: '{{ env "RENDER_EXTERNAL_HOSTNAME" }}'
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: school-management-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: school-management-redis
+          type: redis
+          property: connectionString
+      - key: WEBSOCKETS_ENABLED
+        value: "True"
+  - type: redis
+    name: school-management-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: school-management-db
+    plan: free

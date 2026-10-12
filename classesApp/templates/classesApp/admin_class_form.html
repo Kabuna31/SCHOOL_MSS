@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Class{% endblock %}
+{% block content %}
+<h2 class="mb-3">Class</h2>
+<div class="card shadow-sm p-3">
+  <form method="post">
+    {% csrf_token %}
+    <div class="row g-3">
+      <div class="col-md-4">{{ form.name.label_tag }} {{ form.name }}</div>
+      <div class="col-md-4">{{ form.section.label_tag }} {{ form.section }}</div>
+      <div class="col-md-4">{{ form.capacity.label_tag }} {{ form.capacity }}</div>
+    </div>
+    <div class="d-flex gap-2 mt-3 justify-content-end">
+      <button class="role-btn"><span><i class="bi bi-check2-all"></i> Save</span></button>
+      <a class="role-btn" href="{% url 'admin_classes_list' %}"><span><i class="bi bi-x-lg"></i> Cancel</span></a>
+    </div>
+  </form>
+</div>
+    <div class="d-flex gap-2 mt-4">
+  <button class="role-btn" onclick="window.history.back();"><span>← Back</span></button>
+    </div>
+{% endblock %}

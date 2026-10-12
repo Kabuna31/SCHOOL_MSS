@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Groups{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/messaging-groups.css' %}">
+{% endblock %}
+{% block content %}
+<div class="grp-shell mt-3">
+  <div class="grp-card shadow-sm">
+    <div class="grp-header">
+      <h1><i class="bi bi-people-fill"></i> Groups</h1>
+      <div class="grp-actions">
+        {% if user.role in 'teacher admin' %}<a href="{% url 'create_group' %}" class="role-btn"><span><i class="bi bi-plus-circle"></i> New Group</span></a>{% endif %}
+        <a href="{% url 'inbox' %}" class="role-btn"><span><i class="bi bi-chat-dots"></i> Inbox</span></a>
+      </div>
+    </div>
+    {% if memberships %}
+      <div class="grp-list">
+        {% for m in memberships %}
+          <a href="{% url 'group_chat' m.group.id %}" class="grp-item">
+            <div class="grp-name">{{ m.group.name }}</div>
+            <div class="grp-meta">Created {{ m.group.created_at|date:"M d, Y" }}</div>
+            <div class="grp-footer">
+              <span>{{ m.group.messages.count }} messages</span>
+              <span>{{ m.group.memberships.count }} members</span>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="grp-empty">
+        <i class="bi bi-people"></i>
+        <p>No groups yet. {% if user.role in 'teacher admin' %}Create the first one!{% endif %}</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

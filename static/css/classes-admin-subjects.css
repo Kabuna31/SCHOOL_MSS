@@ -1,0 +1,4 @@
+.subjects-table{table-layout:fixed}
+.subjects-table th{width:33%;text-align:center}
+.subjects-table th:last-child{width:34%}
+.subjects-table td{text-align:center;word-break:break-word}

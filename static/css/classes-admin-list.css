@@ -1,0 +1,2 @@
+#classesTable tbody tr.class-row{cursor:pointer}
+#classesTable tbody tr.class-row:focus{outline:2px solid var(--accent,#1875FF);outline-offset:-2px}

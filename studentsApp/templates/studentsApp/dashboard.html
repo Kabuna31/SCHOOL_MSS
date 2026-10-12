@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Student Dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/students-dashboard.css' %}">
+{% endblock %}
+{% block content %}
+<div class="d-flex">
+  <nav id="studentSidebar" class="student-sidebar">
+    <div class="nav flex-column">
+      <div class="px-3 pt-2 pb-1 text-uppercase small text-muted">Menu</div>
+      <a class="nav-link active" href="{% url 'dashboard_student' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a class="nav-link" href="#attendance"><i class="bi bi-clipboard-check"></i> Attendance</a>
+      <a class="nav-link" href="#exams"><i class="bi bi-journal-check"></i> Exams</a>
+      <a class="nav-link" href="#notices"><i class="bi bi-bell"></i> Notices</a>
+  <a class="nav-link" href="{% url 'student_resources' %}"><i class="bi bi-folder"></i> Resources</a>
+    </div>
+  </nav>
+  <div id="studentMain" class="flex-grow-1 slide-transition">
+    <div class="container-fluid mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+          <button id="studentSidebarToggle"><i class="bi bi-list"></i></button>
+          <div>
+            <h3 class="mb-0">Welcome {{ student.user.first_name }}!</h3>
+            <small class="text-muted">Class: {{ student.class_room }}</small>
+          </div>
+        </div>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-4"><div class="s-stat bg-grad-a"><div><h3>{{ stats.upcoming_exams|default:0 }}</h3><h6>Exams</h6></div><div class="icon"><i class="fa-solid fa-file-pen"></i></div></div></div>
+        <div class="col-sm-6 col-lg-4"><div class="s-stat bg-grad-c"><div><h3>{{ stats.attendance_pct|default:0 }}%</h3><h6>Attendance</h6></div><div class="icon"><i class="fa-solid fa-user-check"></i></div></div></div>
+        <div class="col-sm-6 col-lg-4"><div class="s-stat bg-grad-d"><div><h3>{{ stats.notices|default:0 }}</h3><h6>Notices</h6></div><div class="icon"><i class="fa-solid fa-bell"></i></div></div></div>
+      </div>
+      <div class="row g-4">
+        <div class="col-lg-6" id="attendance">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Attendance</span></div>
+            <div class="card-body">
+              <p class="mb-2"><strong>Today: </strong>
+                {% if today_record %}
+                  {% if today_record.status == 'present' %}<span class="badge bg-success small-badge">Present</span>{% elif today_record.status == 'absent' %}<span class="badge bg-danger small-badge">Absent</span>{% else %}<span class="badge bg-warning text-dark small-badge">Late</span>{% endif %}
+                {% else %}<span class="text-muted small">Not marked</span>{% endif %}
+              </p>
+              <div class="table-responsive">
+                <table class="table table-modern table-sm align-middle mb-0">
+                  <thead><tr><th>Date</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {% for rec in history %}
+                      <tr>
+                        <td>{{ rec.date }}</td>
+                        <td>
+                          {% if rec.status == 'present' %}<span class="badge bg-success small-badge">Present</span>{% elif rec.status == 'absent' %}<span class="badge bg-danger small-badge">Absent</span>{% else %}<span class="badge bg-warning text-dark small-badge">Late</span>{% endif %}
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="2" class="text-center text-muted small">No records</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6" id="exams">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Upcoming Exams</span></div>
+            <div class="card-body p-0">
+              {% if exams %}
+                <ul class="list-group list-group-flush scroll-box">
+                  {% for exam in exams %}
+                    <li class="list-group-item">
+                      <strong>{{ exam.subject.subject }}</strong><br>
+                      <small class="text-muted">{{ exam.exam_date|date:"d M Y" }}</small>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}<div class="p-3 text-muted small">No upcoming exams.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row g-4 mt-1">
+        <div class="col-lg-6" id="notices">
+          <div class="card section-card h-100">
+            <div class="card-header"><span>Notices</span></div>
+            <div class="card-body p-0">
+              {% if notices %}
+                <ul class="list-group list-group-flush scroll-box">
+                  {% for notice in notices %}
+                    <li class="list-group-item">
+                      <strong>{{ notice.title }}</strong><br>
+                      <small class="text-muted">{{ notice.message|truncatechars:80 }}</small>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}<div class="p-3 text-muted small">No notices.</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const sToggle = document.getElementById('studentSidebarToggle');
+  const sSidebar = document.getElementById('studentSidebar');
+  const sMain = document.getElementById('studentMain');
+  sToggle.addEventListener('click',()=>{ sSidebar.classList.toggle('active'); sMain.style.marginLeft = sSidebar.classList.contains('active')? '240px':'0'; });
+</script>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Attendance History{% endblock %}
+{% block content %}
+<div class="card shadow-sm p-4">
+    <h3 class="mb-3 d-flex align-items-center gap-2">
+        {% include 'partials/user_avatar_name.html' with user_obj=student.user size=46 %}
+        Attendance - {{ student.user.first_name }} {{ student.user.last_name }}
+    </h3>
+
+    <div class="table-responsive">
+        <table class="table table-modern table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Marked By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                <tr>
+                    <td>{{ record.date }}</td>
+                    <td>
+                        {% if record.status == "present" %}
+                            <span class="badge bg-success">Present</span>
+                        {% elif record.status == "absent" %}
+                            <span class="badge bg-danger">Absent</span>
+                        {% elif record.status == "late" %}
+                            <span class="badge bg-warning text-dark">Late</span>
+                        {% endif %}
+                    </td>
+                    <td>{% include 'partials/user_avatar_name.html' with user_obj=record.teacher.user size=30 %}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted">No attendance records found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% load dashboard_tags %}
+<a class="role-btn mt-4" href="{% dashboard_url %}"><span>← Back</span></a>
+{% endblock %}
