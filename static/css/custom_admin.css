@@ -1,9 +1,18 @@
-/* Force usermenu and topmenu icons to render immediately */
+/* Force all top navbar icons, search icons, and user account icons to render immediately */
 .navbar-nav .nav-link i, 
+.navbar-nav .nav-icon,
+.user-menu > a i,
 .user-menu .dropdown-item i,
 .user-header i {
     display: inline-block !important;
     visibility: visible !important;
     opacity: 1 !important;
     margin-right: 6px;
+}
+
+/* Ensure account dropdown toggle icon specifically has breathing room and shows */
+.user-menu > a > i {
+    display: inline-block !important;
+    font-size: 1rem !important;
+    margin-right: 4px;
 }
