@@ -10,3 +10,13 @@
     opacity: 1 !important;
     margin-right: 6px;
 }
+
+/* Inject a user profile icon directly into the top navbar account dropdown */
+.user-menu > a::before {
+    font-family: "Font Awesome 5 Free", "Font Awesome 6 Free";
+    font-weight: 900;
+    content: "\f007"; /* Font Awesome fa-user icon */
+    display: inline-block !important;
+    margin-right: 6px;
+    font-size: 0.95rem;
+}
