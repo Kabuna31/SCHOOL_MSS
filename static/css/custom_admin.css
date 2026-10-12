@@ -1,22 +1,12 @@
-/* Force all top navbar icons and user profile dropdown icons to render immediately */
-.navbar-nav .nav-link i, 
-.navbar-nav .nav-icon,
-.user-menu > a i,
-.user-menu .dropdown-item i,
-.user-header i,
-.user-footer i {
+/* Force a user icon inside the top-right account menu header */
+.navbar-nav.ml-auto .user-menu > a::before,
+.user-menu > a::before {
+    content: "\f007" !important; /* FontAwesome user icon code */
+    font-family: "Font Awesome 5 Free", "Font Awesome 6 Free", sans-serif !important;
+    font-weight: 900 !important;
     display: inline-block !important;
+    margin-right: 6px !important;
+    font-size: 0.9rem !important;
     visibility: visible !important;
     opacity: 1 !important;
-    margin-right: 6px;
-}
-
-/* Inject a user profile icon directly into the top navbar account dropdown */
-.user-menu > a::before {
-    font-family: "Font Awesome 5 Free", "Font Awesome 6 Free";
-    font-weight: 900;
-    content: "\f007"; /* Font Awesome fa-user icon */
-    display: inline-block !important;
-    margin-right: 6px;
-    font-size: 0.95rem;
 }
