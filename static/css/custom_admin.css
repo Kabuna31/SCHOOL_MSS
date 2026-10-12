@@ -1,17 +1,46 @@
-/* Top menu links: pill-style buttons in the navbar */
-.main-header.navbar .navbar-nav:not(.ml-auto) {
+/* ==========================================================================
+   Jazzmin navbar customisation
+   Save as: static/css/custom_admin.css
+   ========================================================================== */
+
+/* --- 1. Make sure Font Awesome icons render in the navbar -----------------
+   Lists both FA6 and FA5 so it works whichever version Jazzmin ships. */
+.main-header.navbar i.fas,
+.main-header.navbar i.far,
+.main-header.navbar i.fa-solid,
+.main-header.navbar i.fa-regular {
+    font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+    display: inline-block;
+    font-style: normal;
+    line-height: 1;
+}
+
+.main-header.navbar i.fas,
+.main-header.navbar i.fa-solid {
+    font-weight: 900;
+}
+
+.main-header.navbar i.far,
+.main-header.navbar i.fa-regular {
+    font-weight: 400;
+}
+
+/* --- 2. Top menu links (left side): pill-style buttons --------------------
+   Excludes the right-aligned list (ml-auto = Bootstrap 4, ms-auto = Bootstrap 5)
+   so the user menu is not affected. */
+.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) {
     list-style: none;
     align-items: center;
     margin: 0;
     padding: 0;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) li {
+.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li {
     list-style: none;
     margin-right: 10px;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) li a:not([data-widget="pushmenu"]) {
+.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li a.nav-link:not([data-widget="pushmenu"]) {
     display: inline-flex;
     align-items: center;
     background-color: rgba(255, 255, 255, 0.1);
@@ -23,12 +52,20 @@
     transition: background-color 0.15s ease;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) li a:not([data-widget="pushmenu"]):hover {
+.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li a.nav-link:not([data-widget="pushmenu"]):hover {
     background-color: rgba(255, 255, 255, 0.2);
     color: #fff;
 }
 
-.main-header.navbar .navbar-nav:not(.ml-auto) li a i {
+.main-header.navbar .navbar-nav:not(.ml-auto):not(.ms-auto) li a.nav-link i {
     margin-right: 6px;
     color: inherit;
+}
+
+/* --- 3. User menu (right side): keep the icon visible --------------------- */
+.main-header.navbar .navbar-nav.ml-auto .nav-link i,
+.main-header.navbar .navbar-nav.ms-auto .nav-link i {
+    color: #fff;
+    margin-right: 0;
+    font-size: 1.1rem;
 }
