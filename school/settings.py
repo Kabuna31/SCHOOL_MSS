@@ -193,24 +193,92 @@ INTERNAL_IPS = [
 ]
 
 JAZZMIN_SETTINGS = {
-    "site_title": "School Admin Portal",
-    "site_header": "School Management System",
-    "site_brand": "School System",
-    "welcome_sign": "Welcome to the School Management Dashboard",
+    # Title & Branding
+    "site_title": "School Management Portal",
+    "site_header": "School Administration",
+    "site_brand": "School Management",
+    "site_logo": None,  # You can add a path to a logo image in your static files later if you want
+    "welcome_sign": "Welcome back, Administrator!",
     "copyright": "School Management System",
     
-    # Icons for your apps/models (uses Font Awesome)
+    # Search model configuration
+    "search_model": ["users.customuser", "academic.classlevel"],
+
+    # Top Menu Links
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"name": "View Live Site", "url": "/", "new_window": True},
+        {"model": "users.customuser"},
+    ],
+
+    # User Menu
+    "usermenu_links": [
+        {"name": "Support", "url": "https://github.com/Kabuna31/SCHOOL_SYSTEM", "new_window": True},
+        {"model": "users.customuser"}
+    ],
+
+    # --- SIDEBAR ICON MAPPING (Font Awesome 5/6) ---
     "icons": {
+        # Authentication & Users
         "auth": "fas fa-users-cog",
-        "users.customuser": "fas fa-user",
+        "users.customuser": "fas fa-user-shield",
+        "users.accountant": "fas fa-file-invoice-dollar",
+        
+        # Administration & School Info
         "administration.school": "fas fa-school",
+        
+        # Academic Module
+        "academic.allocatedsubject": "fas fa-book-reader",
         "academic.classlevel": "fas fa-layer-group",
-        "finance.fee": "fas fa-money-bill-wave",
+        "academic.classroom": "fas fa-door-open",
+        "academic.classyear": "fas fa-calendar-alt",
+        "academic.department": "fas fa-building",
+        "academic.dormitory": "fas fa-bed",
+        "academic.dormitoryallocation": "fas fa-clipboard-list",
+        "academic.gradelevel": "fas fa-award",
+        "academic.parent": "fas fa-user-friends",
+        "academic.messagetoparent": "fas fa-sms",
+        "academic.messagetoteacher": "fas fa-comments",
+        
+        # Other Modules
+        "attendance": "fas fa-user-check",
+        "examination": "fas fa-file-alt",
+        "finance": "fas fa-wallet",
+        "notes": "fas fa-sticky-note",
+        "schedule": "fas fa-clock",
+        "sis": "fas fa-graduation-cap",
     },
-    
-    # Custom UI tweaks
+
+    # UI Tweaks & Layout
     "show_sidebar": True,
     "navigation_expanded": True,
     "related_modal_active": True,
-    "theme": "default",  # You can change to 'darkly', 'slate', etc.
+    "custom_css": None,
+    "custom_js": None,
+    "show_ui_builder": True,  # Enables a live theme switcher widget in the bottom-right corner for admins!
+    
+    # UI Theme Options
+    "theme": "pulse",  # Modern, clean Bootstrap theme (or try "flatly", "cosmo", "darkly")
+    "dark_mode_theme": "darkly",
+}
+
+# Optional UI Customizations for Jazzmin UI Builder
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-navy",
+    "accent": "accent-primary",
+    "navbar": "navbar-dark navbar-navy",
+    "no_navbar_border": False,
+    "navbar_fixed": True,
+    "layout_fixed": True,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
 }
