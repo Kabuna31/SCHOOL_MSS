@@ -1,4 +1,7 @@
-from django.test import TestCase
+from django import forms
+from django.contrib import admin
+from django.contrib.auth.models import Group, Permission
+from django.test import RequestFactory, TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from administration.models import School
@@ -87,3 +90,39 @@ class SchoolUserVisibilityTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, [])
+
+
+class GroupPermissionAdminTests(TestCase):
+    def setUp(self):
+        self.admin_user = CustomUser.objects.create_superuser(
+            email="superuser@test",
+            password="test-password",
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_group_permissions_use_selectable_checkboxes(self):
+        request = RequestFactory().get("/admin/auth/group/add/")
+        request.user = self.admin_user
+        form_class = admin.site._registry[Group].get_form(request)
+
+        self.assertIsInstance(
+            form_class.base_fields["permissions"].widget.widget,
+            forms.CheckboxSelectMultiple,
+        )
+
+    def test_group_admin_saves_selected_permissions(self):
+        permission = Permission.objects.first()
+        self.assertIsNotNone(permission)
+        request = RequestFactory().get("/admin/auth/group/add/")
+        request.user = self.admin_user
+        form_class = admin.site._registry[Group].get_form(request)
+        form = form_class(
+            data={
+                "name": "School operators",
+                "permissions": [permission.pk],
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        group = form.save()
+        self.assertTrue(group.permissions.filter(pk=permission.pk).exists())
