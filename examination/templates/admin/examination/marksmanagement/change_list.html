@@ -1,0 +1,13 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if perms.examination.add_marksmanagement or perms.examination.change_marksmanagement %}
+    <li>
+      <a href="{% url 'admin:examination_marksmanagement_enter_marks' %}" class="addlink">
+        Enter marks for a class
+      </a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

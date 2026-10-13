@@ -157,6 +157,13 @@ optional email in the last column when supplied; otherwise it is generated as
 `first.last@hayatul.com`. Imported teacher accounts also have unusable
 passwords until account setup or a password reset.
 
+For on-screen marks entry, open **Admin → Examination → Marks** and select
+**Enter marks for a class**. Choose a term first; exams are filtered to that
+term, and classes are limited to those assigned to the exam. Select the subject
+and responsible teacher to load the enrolled learners as one score-entry sheet.
+Saved marks are prefilled and updated in place. Blank scores are left unchanged;
+scores must be between zero and the exam's maximum.
+
 Create reference records before importing rows that depend on them: departments
 and class levels, streams, academic years, terms, and receipt allocations must
 already exist. Import subjects before teachers; classrooms need their class,

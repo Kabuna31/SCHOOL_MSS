@@ -1,0 +1,189 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .marks-filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 1rem;
+      margin: 1rem 0;
+      align-items: end;
+    }
+    .marks-filters label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+    .marks-filters select,
+    .score-input {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 2.4rem;
+    }
+    .marks-table-wrap {
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+    .marks-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .marks-table th,
+    .marks-table td {
+      padding: 0.65rem;
+      border-bottom: 1px solid var(--hairline-color, #ddd);
+      text-align: left;
+    }
+    .marks-table th {
+      position: sticky;
+      top: 0;
+      background: var(--body-bg, #fff);
+    }
+    .marks-table .score-cell {
+      width: 12rem;
+    }
+    .marks-help {
+      color: var(--body-quiet-color, #666);
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='examination' %}">Examination</a>
+    &rsaquo; <a href="{% url 'admin:examination_marksmanagement_changelist' %}">Marks</a>
+    &rsaquo; Enter marks
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <h1>Enter marks for a class</h1>
+    <p class="marks-help">
+      Choose a term first, then select its exam, class, subject, and responsible teacher.
+      The academic year comes from the selected term.
+      Existing marks are prefilled. Leave a score blank to leave it unchanged; enter 0 for a zero mark.
+    </p>
+
+    <form method="get" class="marks-filters">
+      <div>
+        <label for="term_id">Term</label>
+        <select id="term_id" name="term_id" required onchange="this.form.submit()">
+          <option value="">Choose a term</option>
+          {% for term in terms %}
+            <option value="{{ term.pk }}" {% if selected_term.pk == term.pk %}selected{% endif %}>
+              {{ term.name }} — {{ term.academic_year.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="exam_id">Exam</label>
+        <select id="exam_id" name="exam_id" required onchange="this.form.submit()">
+          <option value="">Choose an exam</option>
+          {% for exam in exams %}
+            <option value="{{ exam.pk }}" {% if selected_exam.pk == exam.pk %}selected{% endif %}>
+              {{ exam.name }} (out of {{ exam.out_of }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="classroom_id">Class</label>
+        <select id="classroom_id" name="classroom_id" required>
+          <option value="">Choose an assigned class</option>
+          {% for classroom in classrooms %}
+            <option value="{{ classroom.pk }}" {% if selected_classroom.pk == classroom.pk %}selected{% endif %}>
+              {{ classroom }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="subject_id">Subject</label>
+        <select id="subject_id" name="subject_id" required>
+          <option value="">Choose a subject</option>
+          {% for subject in subjects %}
+            <option value="{{ subject.pk }}" {% if selected_subject.pk == subject.pk %}selected{% endif %}>
+              {{ subject.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="teacher_id">Responsible teacher</label>
+        <select id="teacher_id" name="teacher_id" required>
+          <option value="">Choose a teacher</option>
+          {% for teacher in teachers %}
+            <option value="{{ teacher.pk }}" {% if selected_teacher.pk == teacher.pk %}selected{% endif %}>
+              {{ teacher }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button type="submit" class="button">Load learners</button>
+      </div>
+    </form>
+
+    {% if selected_term and selected_exam and selected_classroom and selected_subject and selected_year %}
+      <p class="marks-help">Term: {{ selected_term.name }} — Academic year: {{ selected_year.name }}</p>
+      <h2>{{ selected_exam.name }} — {{ selected_classroom }} — {{ selected_subject.name }}</h2>
+      <p class="marks-help">Maximum score: {{ out_of }}</p>
+      {% if enrollments %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="term_id" value="{{ selected_term.pk }}">
+          <input type="hidden" name="exam_id" value="{{ selected_exam.pk }}">
+          <input type="hidden" name="classroom_id" value="{{ selected_classroom.pk }}">
+          <input type="hidden" name="subject_id" value="{{ selected_subject.pk }}">
+          <input type="hidden" name="teacher_id" value="{{ selected_teacher.pk }}">
+          <div class="marks-table-wrap">
+            <table class="marks-table">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Admission number</th>
+                  <th>Learner</th>
+                  <th class="score-cell">Score / {{ out_of }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in entry_rows %}
+                  <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ row.enrollment.student.admission_number|default:"—" }}</td>
+                    <td>{{ row.enrollment.student.full_name }}</td>
+                    <td>
+                      <input
+                        class="score-input"
+                        type="number"
+                        name="score_{{ row.enrollment.pk }}"
+                        min="0"
+                        max="{{ out_of }}"
+                        step="any"
+                        inputmode="decimal"
+                        value="{{ row.score }}"
+                        aria-label="Score for {{ row.enrollment.student.full_name }}"
+                      >
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="submit-row">
+            <input type="submit" value="Save all marks" class="default">
+          </div>
+        </form>
+      {% else %}
+        <p>No learners are enrolled in this class for the selected academic year.</p>
+      {% endif %}
+    {% elif selected_term and not selected_exam %}
+      <p class="help">Choose an exam assigned to this term.</p>
+    {% endif %}
+  </div>
+{% endblock %}

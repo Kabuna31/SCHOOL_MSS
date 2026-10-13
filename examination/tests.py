@@ -20,7 +20,17 @@ from .models import ExaminationListHandler, MarksManagement
 from .reports import _class_band, _grade_for, build_class_report
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(
+    SECURE_SSL_REDIRECT=False,
+    STORAGES={
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    },
+)
 class ClassReportsTests(TestCase):
     def setUp(self):
         self.school = School.objects.create(
@@ -119,6 +129,11 @@ class ClassReportsTests(TestCase):
     def report_url(self, name):
         return reverse(name) + f"?term_id={self.term.pk}&classroom_id={self.classroom.pk}"
 
+    def log_in_as_admin(self):
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_superuser"])
+        self.client.force_login(self.user)
+
     def test_report_card_and_marksheet_return_printable_pdfs(self):
         for endpoint in ("report-cards", "marksheet"):
             with self.subTest(endpoint=endpoint):
@@ -201,3 +216,118 @@ class ClassReportsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["class_average"], 72)
+
+    def test_admin_marks_sheet_prefills_and_saves_marks_for_the_class(self):
+        self.log_in_as_admin()
+        second_student = Student.objects.create(
+            school=self.school,
+            first_name="Sam",
+            last_name="Student",
+            admission_number="S002",
+            parent_contact="1000003",
+        )
+        second_enrollment = StudentClassEnrollment.objects.create(
+            school=self.school,
+            classroom=self.classroom,
+            academic_year=self.academic_year,
+            student=second_student,
+        )
+        entry_url = reverse("admin:examination_marksmanagement_enter_marks")
+        selection = {
+            "term_id": self.term.pk,
+            "exam_id": self.aoi.pk,
+            "classroom_id": self.classroom.pk,
+            "subject_id": self.subject.pk,
+            "teacher_id": self.teacher.pk,
+        }
+
+        response = self.client.get(entry_url, selection)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Alex Learner")
+        self.assertContains(response, 'value="80.0"')
+
+        response = self.client.post(
+            entry_url,
+            {
+                **selection,
+                f"score_{self.enrollment.pk}": "91",
+                f"score_{second_enrollment.pk}": "82.5",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            MarksManagement.objects.get(
+                exam_name=self.aoi,
+                subject=self.subject,
+                student=self.enrollment,
+            ).points_scored,
+            91,
+        )
+        self.assertEqual(
+            MarksManagement.objects.get(
+                exam_name=self.aoi,
+                subject=self.subject,
+                student=second_enrollment,
+            ).points_scored,
+            82.5,
+        )
+
+    def test_admin_marks_sheet_requires_a_term_and_filters_exams_by_term(self):
+        self.log_in_as_admin()
+        second_term = Term.objects.create(
+            name="Term Three",
+            academic_year=self.academic_year,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 12, 31),
+        )
+        other_term_exam = ExaminationListHandler.objects.create(
+            school=self.school,
+            name="Term Three exam",
+            term=second_term,
+            assessment_type="EOT",
+            start_date=date(2026, 9, 1),
+            ends_date=date(2026, 9, 2),
+            out_of=100,
+            created_by=self.teacher,
+        )
+        other_term_exam.classrooms.add(self.classroom)
+        entry_url = reverse("admin:examination_marksmanagement_enter_marks")
+
+        response = self.client.get(entry_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "AOI one")
+
+        response = self.client.get(entry_url, {"term_id": self.term.pk})
+
+        self.assertContains(response, "AOI one")
+        self.assertNotContains(response, "Term Three exam")
+
+    def test_admin_marks_sheet_rejects_invalid_scores_without_partial_saves(self):
+        self.log_in_as_admin()
+        entry_url = reverse("admin:examination_marksmanagement_enter_marks")
+
+        response = self.client.post(
+            entry_url,
+            {
+                "term_id": self.term.pk,
+                "exam_id": self.aoi.pk,
+                "classroom_id": self.classroom.pk,
+                "subject_id": self.subject.pk,
+                "teacher_id": self.teacher.pk,
+                f"score_{self.enrollment.pk}": "101",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Enter a score from 0 to 100")
+        self.assertEqual(
+            MarksManagement.objects.get(
+                exam_name=self.aoi,
+                subject=self.subject,
+                student=self.enrollment,
+            ).points_scored,
+            80,
+        )
