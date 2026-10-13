@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime
 from django.db import models
 from django.conf import settings
@@ -5,6 +6,9 @@ from django.core.exceptions import ValidationError
 from user_agents import parse
 
 from .common_objs import *
+
+
+logger = logging.getLogger(__name__)
 
 
 class School(models.Model):
@@ -82,16 +86,16 @@ class AccessLog(models.Model):
         try:
             user_agent = parse(self.ua)
             return user_agent.os.family
-        except Exception as e:
-            print(f"Error extracting OS from UA: {e}")
+        except Exception:
+            logger.warning("Could not extract operating system from access log.")
             return "Unknown"
 
     def browser(self):
         try:
             user_agent = parse(self.ua)
             return user_agent.browser.family
-        except Exception as e:
-            print(f"Error extracting Browser from UA: {e}")
+        except Exception:
+            logger.warning("Could not extract browser from access log.")
             return "Unknown"
 
     class Meta:

@@ -1,9 +1,13 @@
+import logging
 import datetime
 from django.db import models
 from django.core.exceptions import ValidationError
 from academic.models import Student, Teacher, ClassRoom, StudentClassEnrollment, Subject
 from administration.models import AcademicYear, Term, School
 from administration.managers import SchoolScopedManager
+
+
+logger = logging.getLogger(__name__)
 
 
 class GradeScale(models.Model):
@@ -31,7 +35,7 @@ class GradeScale(models.Model):
             min_grade__lte=grade, max_grade__gte=grade
         ).first()
         if not rule:
-            print(f"No rule found for grade: {grade}")
+            logger.debug("No grade scale rule matched a numeric grade.")
         return rule
 
     def to_letter(self, grade):

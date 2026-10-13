@@ -1,5 +1,7 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
+from academic.models import Student
 from users.models import CustomUser as User
 from .models import (
     Assignment,
@@ -70,27 +72,107 @@ class GradedAssignmentSerializer(serializers.ModelSerializer):
         model = GradedAssignment
         fields = "__all__"
 
-    def create(self, request):
-        data = request.data
-        print(data)
 
-        assignment = Assignment.objects.get(id=data["asntId"])
-        student = User.objects.get(username=data["username"])
+class GradedAssignmentSubmissionSerializer(serializers.Serializer):
+    assignment_id = serializers.IntegerField(min_value=1)
+    student_id = serializers.IntegerField(min_value=1)
+    answers = serializers.DictField(
+        child=serializers.CharField(), required=False, default=dict
+    )
 
-        graded_asnt = GradedAssignment()
-        graded_asnt.assignment = assignment
-        graded_asnt.student = student
+    def validate(self, attrs):
+        parent = self.context["parent"]
+        student = Student.objects.filter(
+            pk=attrs["student_id"],
+            parent_guardian=parent,
+            school_id=parent.school_id,
+        ).first()
+        if student is None:
+            raise PermissionDenied(
+                "You can only submit assignments for children linked to your account."
+            )
 
-        questions = [q for q in assignment.questions.all()]
-        answers = [data["answers"][a] for a in data["answers"]]
+        assignment = (
+            Assignment.objects.select_related("teacher")
+            .filter(pk=attrs["assignment_id"], teacher__school_id=parent.school_id)
+            .first()
+        )
+        if assignment is None:
+            raise serializers.ValidationError(
+                {"assignment_id": "The assignment is not available for your school."}
+            )
 
-        answered_correct_count = 0
-        for i in range(len(questions)):
-            if questions[i].answer.title == answers[i]:
-                answered_correct_count += 1
-            i += 1
+        questions = list(
+            assignment.questions.select_related("answer")
+            .prefetch_related("choices")
+            .order_by("id")
+        )
+        if not questions:
+            raise serializers.ValidationError(
+                {"assignment_id": "This assignment has no questions to grade."}
+            )
 
-        grade = answered_correct_count / len(questions) * 100
-        graded_asnt.grade = grade
-        graded_asnt.save()
-        return graded_asnt
+        question_ids = {question.pk for question in questions}
+        normalized_answers = {}
+        for question_id, choice_id in attrs["answers"].items():
+            try:
+                parsed_question_id = int(question_id)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    {"answers": f"Invalid question ID: {question_id}."}
+                ) from None
+
+            if parsed_question_id in normalized_answers:
+                raise serializers.ValidationError(
+                    {
+                        "answers": (
+                            f"Question {parsed_question_id} was answered more than once."
+                        )
+                    }
+                )
+            if parsed_question_id not in question_ids:
+                raise serializers.ValidationError(
+                    {"answers": f"Question {parsed_question_id} is not in this assignment."}
+                )
+            normalized_answers[parsed_question_id] = choice_id
+
+        correct_count = 0
+        for question in questions:
+            choices = list(question.choices.all())
+            choice_titles = {choice.title for choice in choices}
+            if (
+                question.answer_id is None
+                or question.answer_id not in {choice.pk for choice in choices}
+                or None in choice_titles
+                or "" in choice_titles
+                or len(choice_titles) != len(choices)
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "assignment_id": (
+                            "This assignment contains a question without a valid answer."
+                        )
+                    }
+                )
+
+            selected_title = normalized_answers.get(question.pk)
+            if selected_title is not None:
+                if selected_title not in choice_titles:
+                    raise serializers.ValidationError(
+                        {
+                            "answers": (
+                                f"Selected choice is not valid for question {question.pk}."
+                            )
+                        }
+                    )
+                if selected_title == question.answer.title:
+                    correct_count += 1
+
+        return {
+            "assignment": assignment,
+            "student": student,
+            "grade": correct_count / len(questions) * 100,
+        }
+
+    def create(self, validated_data):
+        return GradedAssignment.objects.create(**validated_data)

@@ -61,7 +61,6 @@ class ClassLevelListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        print(request.data)
         return super().create(request, *args, **kwargs)
 
 

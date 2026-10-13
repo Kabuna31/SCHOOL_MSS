@@ -87,7 +87,6 @@ class PaymentAllocationDetailView(APIView):
         """
         Retrieve details of a specific insurance.
         """
-        print(request.data)
         insurance = self.get_object(pk)
         serializer = PaymentAllocationSerializer(insurance)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -263,7 +262,6 @@ class ReceiptDetailView(generics.RetrieveUpdateDestroyAPIView):
         """
         Override the update method to handle custom validation or processing.
         """
-        print(request.data)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -290,7 +288,6 @@ class PaymentListView(generics.ListCreateAPIView):
         """
         Override the create method to handle custom validation or processing.
         """
-        print(request.data)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

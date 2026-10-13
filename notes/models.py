@@ -20,7 +20,7 @@ class GradedAssignment(models.Model):
     grade = models.FloatField()
 
     def __str__(self):
-        return self.student.username
+        return str(self.student)
 
 
 class Choice(models.Model):

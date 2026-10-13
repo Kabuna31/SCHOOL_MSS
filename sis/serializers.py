@@ -105,7 +105,6 @@ class StudentSerializer(serializers.ModelSerializer):
         return obj.parent_guardian.email if obj.parent_guardian else None
 
     def validate_and_create_student(self, data):
-        print("validated_data:", data)
         class_level_name = data.pop("class_level", None)
         if not class_level_name:
             raise serializers.ValidationError("Missing 'class_level' field.")

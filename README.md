@@ -177,3 +177,26 @@ instead of preventing unrelated valid rows from being imported; check the
 response's `not_created` or equivalent error list before treating an upload as
 complete. Parent accounts created by student imports also require account
 setup before login.
+
+### Graded assignment submissions
+
+Within the school API prefix, authenticated parent accounts can list their
+children's graded assignments with `GET assignments/graded/` and submit an
+attempt with `POST assignments/graded/submit/`. A submission uses the
+assignment ID, the linked student's ID, and a map of question IDs to the
+selected choice text:
+
+```json
+{
+  "assignment_id": 12,
+  "student_id": 34,
+  "answers": {
+    "101": "Four",
+    "102": "Eight"
+  }
+}
+```
+
+Only children linked to the authenticated parent and assignments belonging
+to the same school are accepted. Omitted questions count as incorrect, and
+assignments without gradable questions are rejected.

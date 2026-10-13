@@ -1,3 +1,4 @@
+import logging
 from django.db import models
 from django.conf import settings
 
@@ -5,6 +6,9 @@ from academic.models import Student
 from users.models import CustomUser, Accountant
 from academic.models import Teacher
 import datetime
+
+
+logger = logging.getLogger(__name__)
 
 
 # Create your models here.
@@ -106,9 +110,7 @@ class StudentAttendance(models.Model):
             super(StudentAttendance, self).save(*args, **kwargs)
         else:
             # Instead of deleting, just skip saving
-            print(
-                f"Attendance not saved for {self.student} on {self.date} because they are marked as 'Present'."
-            )
+            logger.debug("Present student attendance entries are not persisted.")
 
 
 class PeriodAttendance(models.Model):
