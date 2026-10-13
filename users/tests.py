@@ -1,12 +1,26 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.models import Group, Permission
-from django.test import RequestFactory, TestCase
+from django.middleware.locale import LocaleMiddleware
+from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.utils import translation
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from administration.models import School
 from users.models import CustomUser
 from users.views import UserDetailView, UserListView
+
+
+class AdminTranslationCatalogTests(SimpleTestCase):
+    def test_admin_javascript_catalog_handles_deactivated_language(self):
+        with translation.override("en-us"):
+            translation.deactivate_all()
+            request = RequestFactory().get("/admin/jsi18n/")
+            response = LocaleMiddleware(admin.site.i18n_javascript)(request)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(request.LANGUAGE_CODE, "en")
+            self.assertTrue(response["Content-Type"].startswith("text/javascript"))
 
 
 class SchoolUserVisibilityTests(TestCase):

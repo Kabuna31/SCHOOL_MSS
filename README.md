@@ -114,8 +114,10 @@ then provision school schemas with `python manage.py create_school_tenant`.
 Provisioning seeds school metadata and weekdays; it does not migrate existing
 business records. Deployments run
 `migrate_deployment`, which uses Django migrations in legacy mode and
-`migrate_schemas` during preparation or when schema tenancy is enabled. WSGI
-startup does not run migrations.
+`migrate_schemas` during preparation or when schema tenancy is enabled. On
+Render, use `python manage.py migrate_deployment` as the release/pre-deploy
+command and `gunicorn school.wsgi:application --bind 0.0.0.0:$PORT` as the
+web start command; do not chain migrations into the web start command.
 
 Authentication and user identities remain shared in the public schema.
 Academic, attendance, examination, finance, notes, schedule, and SIS models are

@@ -122,6 +122,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "api.middleware.CustomExceptionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -201,10 +202,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 MEDIA_URL = "/media/"
 
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-    BASE_DIR / "static/dist/assets",
-]
+STATICFILES_DIRS = [BASE_DIR / "static"]
+DIST_ASSETS_DIR = BASE_DIR / "static" / "dist" / "assets"
+if DIST_ASSETS_DIR.is_dir():
+    STATICFILES_DIRS.append(DIST_ASSETS_DIR)
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
