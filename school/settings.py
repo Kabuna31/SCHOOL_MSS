@@ -4,6 +4,7 @@ from pathlib import Path
 
 import dj_database_url
 import environ
+from django.core.exceptions import ImproperlyConfigured
 from django.core.validators import MinValueValidator
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -22,16 +23,26 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
+render_hostname = env("RENDER_EXTERNAL_HOSTNAME", default="").strip()
+if render_hostname and render_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_hostname)
 
 # Needed if your frontend posts to Django (e.g. admin) from another domain.
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+TENANCY_PREPARATION = env.bool("TENANCY_PREPARATION", default=False)
+TENANCY_ENABLED = env.bool("TENANCY_ENABLED", default=False)
+TENANCY_CONFIGURED = TENANCY_PREPARATION or TENANCY_ENABLED
+TENANCY_DATA_MIGRATION_COMPLETE = env.bool(
+    "TENANCY_DATA_MIGRATION_COMPLETE", default=False
+)
+TENANT_SUBFOLDER_PREFIX = "t"
 
 DATE_VALIDATORS = [MinValueValidator(date(1970, 1, 1))]
 
 # ---------------------------------------------------------------------------
 # Application definition
 # ---------------------------------------------------------------------------
-INSTALLED_APPS = [
+LEGACY_INSTALLED_APPS = [
     "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -53,6 +64,68 @@ INSTALLED_APPS = [
     "users.apps.UsersConfig",
 ]
 
+SHARED_APPS = [
+    "django_tenants",
+    "tenants.apps.TenantsConfig",
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "corsheaders",
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "administration.apps.AdministrationConfig",
+    "users.apps.UsersConfig",
+]
+
+TENANT_APPS = [
+    "jazzmin",
+    "django.contrib.admin",
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "corsheaders",
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "academic.apps.AcademicConfig",
+    "administration.apps.AdministrationConfig",
+    "attendance.apps.AttendanceConfig",
+    "examination.apps.ExaminationConfig",
+    "finance.apps.FinanceConfig",
+    "notes.apps.NotesConfig",
+    "schedule.apps.ScheduleConfig",
+    "sis.apps.SisConfig",
+    "users.apps.UsersConfig",
+]
+
+if TENANCY_CONFIGURED:
+    if TENANCY_ENABLED and not TENANCY_DATA_MIGRATION_COMPLETE:
+        raise ImproperlyConfigured(
+            "Set TENANCY_DATA_MIGRATION_COMPLETE only after existing school data "
+            "has been migrated and verified in PostgreSQL tenant schemas."
+        )
+
+    if dj_database_url.parse(
+        env("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=not DEBUG,
+    )["ENGINE"] != "django.db.backends.postgresql":
+        raise ImproperlyConfigured(
+            "django-tenants requires DATABASE_URL to point to PostgreSQL."
+        )
+
+    INSTALLED_APPS = list(SHARED_APPS) + [
+        app for app in TENANT_APPS if app not in SHARED_APPS
+    ]
+else:
+    INSTALLED_APPS = [
+        *LEGACY_INSTALLED_APPS,
+        "tenants.apps.TenantsConfig",
+    ]
+
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -65,10 +138,18 @@ MIDDLEWARE = [
     'utils.middleware.CurrentRequestMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    
 ]
 
 ROOT_URLCONF = "school.urls"
+TENANT_MODEL = "tenants.SchoolTenant"
+TENANT_DOMAIN_MODEL = "tenants.Domain"
+
+if TENANCY_CONFIGURED:
+    DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
+
+if TENANCY_ENABLED:
+    PUBLIC_SCHEMA_URLCONF = "school.public_urls"
+    MIDDLEWARE.insert(0, "django_tenants.middleware.subfolder.TenantSubfolderMiddleware")
 
 TEMPLATES = [
     {
@@ -101,6 +182,8 @@ DATABASES = {
         ssl_require=not DEBUG,
     )
 }
+if TENANCY_CONFIGURED:
+    DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
 
 # ---------------------------------------------------------------------------
 # Password validation
