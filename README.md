@@ -200,3 +200,39 @@ selected choice text:
 Only children linked to the authenticated parent and assignments belonging
 to the same school are accepted. Omitted questions count as incorrect, and
 assignments without gradable questions are rejected.
+
+### Report cards, marksheets, and result analysis
+
+The examination reports require exams to be assigned to a term and classified
+as `AOI` or `EOT` in the examination admin. Existing exams default to `EOT`;
+edit their term and assessment type before generating reports. Set the class
+name to Senior 1–4 (or S.1–S.4) for O-Level bands, or Senior 5–6 (or S.5–S.6)
+for A-Level bands.
+
+All report routes require authentication and the query parameters
+`term_id=<term>` and `classroom_id=<classroom>`. School administrators can
+report on their school's classes. Teachers can report only for classes where
+they are class teacher or have a subject allocation for the selected academic
+year.
+
+- `GET /api/examination/reports/report-cards/` opens a printable PDF with one
+  student report per page. Add `student_id=<student>` to print one student's
+  report.
+- `GET /api/examination/reports/mid-term-report-cards/` opens a printable
+  mid-term PDF with one student report per page. It averages AOI marks only,
+  calculates the grade and student ranking from those AOI averages, and does
+  not include EOT marks.
+- `GET /api/examination/reports/marksheet/` opens the class marksheet PDF.
+- `GET /api/examination/reports/analysis/` returns JSON with subject averages,
+  highest/lowest scores, pass rates, grade counts, class average, and student
+  rankings.
+- `GET /api/examination/reports/analysis.pdf/` opens a printable PDF of the
+  class analysis.
+
+Scores are normalized to percentages using each exam's `out_of` value. If a
+student has multiple exams in a category, the category score is their average
+percentage. The final subject score is AOI × 20% + EOT × 80%; a final grade is
+shown only when both categories have marks. O-Level grades use A (80–100), B
+(70–79), C (60–69), D (50–59), E (0–49). A-Level grades use D1 (80–100), D2
+(70–79), C3 (65–69), C4 (60–64), C5 (55–59), C6 (50–54), P7 (45–49), P8
+(40–44), F9 (0–39).

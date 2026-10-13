@@ -128,8 +128,25 @@ class Result(models.Model):
 
 
 class ExaminationListHandler(models.Model):
+    ASSESSMENT_TYPE_CHOICES = (
+        ("AOI", "Assessment of Learning (AOI)"),
+        ("EOT", "End of Term (EOT)"),
+    )
+
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="examinations")
     name = models.CharField(max_length=100)
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.CASCADE,
+        related_name="examinations",
+        null=True,
+        blank=True,
+    )
+    assessment_type = models.CharField(
+        max_length=3,
+        choices=ASSESSMENT_TYPE_CHOICES,
+        default="EOT",
+    )
     start_date = models.DateField()
     ends_date = models.DateField()
     out_of = models.IntegerField()
@@ -163,6 +180,12 @@ class ExaminationListHandler(models.Model):
     def clean(self):
         if self.start_date > self.ends_date:
             raise ValidationError("Start date cannot be later than end date.")
+        if (
+            self.term_id
+            and self.term.academic_year.school_id
+            and self.term.academic_year.school_id != self.school_id
+        ):
+            raise ValidationError("The selected term belongs to another school.")
         super(ExaminationListHandler, self).clean()
 
 

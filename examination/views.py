@@ -27,6 +27,50 @@ from utils.bulk_imports import (
     text_value,
 )
 from .models import ExaminationListHandler, MarksManagement
+from .reports import (
+    analysis_payload,
+    analysis_pdf,
+    build_class_report,
+    marksheet_pdf,
+    report_cards_pdf,
+    report_scope,
+)
+
+
+class ClassReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_report_data(self, request, mid_term=False):
+        school, term, classroom, student_id = report_scope(request)
+        return build_class_report(school, term, classroom, student_id, mid_term)
+
+
+class ReportCardsView(ClassReportView):
+    def get(self, request):
+        return report_cards_pdf(self.get_report_data(request))
+
+
+class MidTermReportCardsView(ClassReportView):
+    def get(self, request):
+        return report_cards_pdf(
+            self.get_report_data(request, mid_term=True),
+            mid_term=True,
+        )
+
+
+class MarksheetView(ClassReportView):
+    def get(self, request):
+        return marksheet_pdf(self.get_report_data(request))
+
+
+class ResultAnalysisView(ClassReportView):
+    def get(self, request):
+        return Response(analysis_payload(self.get_report_data(request)))
+
+
+class ResultAnalysisPDFView(ClassReportView):
+    def get(self, request):
+        return analysis_pdf(self.get_report_data(request))
 
 
 class MarksBulkUploadView(APIView):
