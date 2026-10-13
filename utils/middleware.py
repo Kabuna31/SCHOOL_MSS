@@ -12,6 +12,7 @@ class CurrentRequestMiddleware:
 
     def __call__(self, request):
         _thread_locals.request = request
-        response = self.get_response(request)
-        _thread_locals.request = None  # Clean up after request completes
-        return response
+        try:
+            return self.get_response(request)
+        finally:
+            del _thread_locals.request

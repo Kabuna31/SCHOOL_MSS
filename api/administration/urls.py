@@ -31,7 +31,6 @@ urlpatterns = [
     # Term URLs
     path("terms/", TermListCreateView.as_view(), name="term-list-create"),
     path("terms/<int:pk>/", TermDetailView.as_view(), name="term-detail"),
-    path("school-events/", include(router.urls)),
     path(
         "school-events/bulk-upload/",
         SchoolEventBulkUploadView.as_view(),
@@ -42,4 +41,5 @@ urlpatterns = [
         SchoolEventTemplateDownloadView.as_view(),
         name="school-events-template-download",
     ),
+    path("school-events/", include(router.urls)),
 ]

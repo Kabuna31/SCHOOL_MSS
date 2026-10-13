@@ -1,10 +1,12 @@
 import openpyxl
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
 from rest_framework import generics, viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from utils.bulk_imports import date_value, get_request_school, iter_excel_rows, text_value
 from .models import AcademicYear, Term, Article, CarouselImage, SchoolEvent
 from .serializers import (
     AcademicYearSerializer,
@@ -110,32 +112,66 @@ class SchoolEventBulkUploadView(APIView):
                 {"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            workbook = openpyxl.load_workbook(excel_file)
-            sheet = workbook.active
-            rows = list(sheet.iter_rows(min_row=2, values_only=True))  # Skip header row
-
-            for row in rows:
-                name, event_type, term_id, start_date, end_date, description = row
-                if not all([name, event_type, term_id, start_date]):
-                    continue  # Skip invalid rows
-
-                SchoolEvent.objects.create(
-                    name=name,
-                    event_type=event_type,
-                    term=Term.objects.get(pk=term_id),
-                    start_date=start_date,
-                    end_date=end_date,
-                    description=description or "",
-                )
-
+        school = get_request_school(request)
+        if school is None:
             return Response(
-                {"detail": f"{len(rows)} events uploaded successfully."},
-                status=status.HTTP_201_CREATED,
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        columns = ["name", "event_type", "term_id", "start_date", "end_date", "description"]
+        created = 0
+        errors = []
+        try:
+            for row_number, row_data in iter_excel_rows(excel_file, columns):
+                try:
+                    name = text_value(row_data["name"])
+                    event_type = text_value(row_data["event_type"]).lower()
+                    term_id = text_value(row_data["term_id"])
+                    start_date = date_value(row_data["start_date"], "Start date")
+                    end_date = (
+                        date_value(row_data["end_date"], "End date")
+                        if row_data["end_date"]
+                        else None
+                    )
+                    description = text_value(row_data["description"])
+                    if not name or not event_type or not term_id:
+                        raise ValueError("Name, event type, and term ID are required.")
+                    valid_event_types = {
+                        value for value, _label in SchoolEvent.EVENT_TYPE_CHOICES
+                    }
+                    if event_type not in valid_event_types:
+                        raise ValueError("Event type is not supported.")
+                    term = Term.objects.get(
+                        pk=term_id, academic_year__school=school
+                    )
+                    event = SchoolEvent(
+                        name=name,
+                        event_type=event_type,
+                        term=term,
+                        start_date=start_date,
+                        end_date=end_date,
+                        description=description,
+                    )
+                    event.full_clean()
+                    event.save()
+                    created += 1
+                except (ValueError, TypeError, Term.DoesNotExist, ValidationError) as exc:
+                    errors.append({"row": row_number, "data": row_data, "error": str(exc)})
+
+            return Response(
+                {"detail": f"{created} events uploaded successfully.", "not_created": errors},
+                status=status.HTTP_201_CREATED,
+            )
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class SchoolEventTemplateDownloadView(APIView):

@@ -1,4 +1,6 @@
 import openpyxl
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist, ValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.core.exceptions import ValidationError
 from rest_framework import generics
@@ -31,6 +33,7 @@ from .serializers import (
     ClassRoomSerializer,
     StudentClassEnrollmentSerializer,
 )
+from utils.bulk_imports import get_request_school, iter_excel_rows, text_value
 
 
 # Department Views
@@ -143,68 +146,67 @@ class BulkUploadSubjectsView(APIView):
                 {"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        columns = ["name", "subject_code", "department"]
+        subjects_to_create = []
+        not_created = []
+        seen_names = set()
+        seen_codes = set()
         try:
-            # Load the Excel file
-            workbook = openpyxl.load_workbook(file)
-            sheet = workbook.active  # Assuming data is in the first sheet
-
-            # Expected columns in the Excel file
-            columns = [
-                "name",  # Subject name
-                "subject_code",  # Subject code
-                "department",  # Department name (for ForeignKey)
-            ]
-
-            subjects_to_create = []
-            not_created = []  # List to store invalid rows and their errors
-
-            for i, row in enumerate(
-                sheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
-                # Map row data to the expected columns
-                subject_data = dict(zip(columns, row))
-
+            for row_number, subject_data in iter_excel_rows(file, columns):
                 try:
-                    # Validate department
-                    try:
-                        department = Department.objects.get(
-                            name=subject_data["department"].strip().lower()
-                        )
-                    except Department.DoesNotExist:
+                    name = text_value(subject_data["name"]).lower()
+                    subject_code = text_value(subject_data["subject_code"]).upper()
+                    department_name = text_value(subject_data["department"]).lower()
+                    if not name or not subject_code or not department_name:
                         raise ValueError(
-                            f"Department '{subject_data['department']}' does not exist."
+                            "Name, subject code, and department are required."
                         )
-
-                    # Check for duplicate subject based on subject code or name
-                    if Subject.objects.filter(
-                        subject_code=subject_data["subject_code"]
+                    if subject_code in seen_codes or Subject.objects.filter(
+                        school=school, subject_code__iexact=subject_code
                     ).exists():
                         raise ValueError(
-                            f"Subject code '{subject_data['subject_code']}' already exists."
+                            f"Subject code {subject_code!r} already exists."
                         )
-                    if Subject.objects.filter(name=subject_data["name"]).exists():
-                        raise ValueError(
-                            f"Subject name '{subject_data['name']}' already exists."
-                        )
-
-                    # Create Subject object
+                    if name in seen_names or Subject.objects.filter(
+                        school=school, name__iexact=name
+                    ).exists():
+                        raise ValueError(f"Subject name {name!r} already exists.")
+                    department = Department.objects.get(
+                        school=school, name__iexact=department_name
+                    )
                     subject = Subject(
-                        name=subject_data["name"].strip(),
-                        subject_code=subject_data["subject_code"].strip(),
-                        description=f"{subject_data['name']} ({subject_data['subject_code']})",
+                        school=school,
+                        name=name,
+                        subject_code=subject_code,
+                        description=f"{name} - {subject_code}",
                         department=department,
                     )
                     subjects_to_create.append(subject)
+                    seen_names.add(name)
+                    seen_codes.add(subject_code)
+                except (ValueError, ObjectDoesNotExist, MultipleObjectsReturned) as exc:
+                    not_created.append(
+                        {"row": row_number, "data": subject_data, "error": str(exc)}
+                    )
 
-                except Exception as e:
-                    # Add row data and error message to the not_created list
-                    subject_data["error"] = str(e)
-                    not_created.append(subject_data)
-
-            # Bulk create valid subjects
             if subjects_to_create:
-                Subject.objects.bulk_create(subjects_to_create)
-
+                try:
+                    with transaction.atomic():
+                        Subject.objects.bulk_create(subjects_to_create)
+                except IntegrityError:
+                    return Response(
+                        {
+                            "error": "One or more subjects conflict with existing school data."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             return Response(
                 {
                     "message": f"{len(subjects_to_create)} subjects successfully uploaded.",
@@ -212,9 +214,15 @@ class BulkUploadSubjectsView(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class ClassRoomView(APIView):
@@ -247,72 +255,79 @@ class BulkUploadClassRoomsView(APIView):
                 {"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        columns = ["name", "stream", "class_teacher"]
+        classrooms_to_create = []
+        not_created = []
+        seen_classrooms = set()
         try:
-            workbook = openpyxl.load_workbook(file)
-            sheet = workbook.active  # Assuming data is in the first sheet
-
-            columns = [
-                "name",  # ClassLevel name
-                "stream",  # Stream name
-                "class_teacher",  # Full name of class teacher
-            ]
-
-            classrooms_to_create = []
-            not_created = []
-
-            for i, row in enumerate(
-                sheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
-                classroom_data = dict(zip(columns, row))
-
+            for row_number, classroom_data in iter_excel_rows(file, columns):
                 try:
-                    # Validate and fetch related objects
-                    name = ClassLevel.objects.get(name=classroom_data["name"].lower())
-                    stream = Stream.objects.get(name=classroom_data["stream"].upper())
-
-                    # Check if ClassRoom with the same name and stream already exists
-                    if ClassRoom.objects.filter(name=name, stream=stream).exists():
+                    class_name = text_value(classroom_data["name"]).lower()
+                    stream_name = text_value(classroom_data["stream"]).upper()
+                    teacher_name = text_value(classroom_data["class_teacher"]).lower()
+                    if not class_name or not stream_name or not teacher_name:
                         raise ValueError(
-                            f"Row {i}: ClassRoom with the same name and stream already exists."
+                            "Class, stream, and class teacher are required."
+                        )
+                    name = ClassLevel.objects.get(
+                        school=school, name__iexact=class_name
+                    )
+                    stream = Stream.objects.get(
+                        school=school, name__iexact=stream_name
+                    )
+                    key = (name.pk, stream.pk)
+                    if key in seen_classrooms or ClassRoom.objects.filter(
+                        school=school, name=name, stream=stream
+                    ).exists():
+                        raise ValueError(
+                            "Classroom with this class and stream already exists."
                         )
 
-                    # Split the class teacher name and fetch the teacher
-                    teacher_name_parts = classroom_data["class_teacher"].lower().split()
+                    teacher_name_parts = teacher_name.split()
                     if len(teacher_name_parts) < 2:
                         raise ValueError(
                             "Class teacher name must include both first and last name."
                         )
-
-                    class_teacher_first_name = teacher_name_parts[0]
-                    class_teacher_last_name = teacher_name_parts[1]
-
                     class_teacher = Teacher.objects.get(
-                        first_name=class_teacher_first_name,
-                        last_name=class_teacher_last_name,
+                        school=school,
+                        first_name__iexact=teacher_name_parts[0],
+                        last_name__iexact=teacher_name_parts[-1],
                     )
-
-                    # Create the ClassRoom object
                     classroom = ClassRoom(
+                        school=school,
                         name=name,
                         stream=stream,
                         class_teacher=class_teacher,
                     )
                     classrooms_to_create.append(classroom)
-
-                except Exception as e:
-                    # Collect the row and its error
+                    seen_classrooms.add(key)
+                except (ValueError, ObjectDoesNotExist, MultipleObjectsReturned) as exc:
                     not_created.append(
                         {
-                            "row": i,
+                            "row": row_number,
                             "data": classroom_data,
-                            "error": str(e),
+                            "error": str(exc),
                         }
                     )
 
-            # Bulk create classrooms
             if classrooms_to_create:
-                ClassRoom.objects.bulk_create(classrooms_to_create)
-
+                try:
+                    with transaction.atomic():
+                        ClassRoom.objects.bulk_create(classrooms_to_create)
+                except IntegrityError:
+                    return Response(
+                        {
+                            "error": "One or more classrooms conflict with existing school data."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             return Response(
                 {
                     "created": len(classrooms_to_create),
@@ -320,9 +335,15 @@ class BulkUploadClassRoomsView(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class StudentClassListCreateView(generics.ListCreateAPIView):
@@ -358,110 +379,98 @@ class BulkUploadStudentClassView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        columns = [
+            "classroom_name",
+            "stream_name",
+            "academic_year",
+            "student_full_name",
+        ]
+        rows_with_errors = []
+        student_classes_to_create = []
+        seen_assignments = set()
+        pending_per_classroom = {}
         try:
-            # Load the Excel file
-            workbook = openpyxl.load_workbook(file)
-            sheet = workbook.active  # Assuming the data is in the first sheet
-
-            # Expected columns in the Excel file
-            columns = [
-                "classroom_name",  # Classroom name
-                "stream_name",  # Stream name
-                "academic_year",  # Academic year
-                "student_full_name",  # Student's full name
-            ]
-
-            rows_with_errors = []
-            student_classes_to_create = []
-            for i, row in enumerate(
-                sheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
-                # Map row data to the expected columns
-                row_data = dict(zip(columns, row))
-
+            for row_number, row_data in iter_excel_rows(file, columns):
                 try:
-                    # Validate Classroom
-                    try:
-                        classroom = ClassRoom.objects.get(
-                            name__name=row_data["classroom_name"].strip().lower(),
-                            stream__name=row_data["stream_name"].strip().upper(),
+                    classroom_name = text_value(row_data["classroom_name"]).lower()
+                    stream_name = text_value(row_data["stream_name"]).upper()
+                    year_name = text_value(row_data["academic_year"])
+                    full_name = text_value(row_data["student_full_name"]).lower()
+                    if not all((classroom_name, stream_name, year_name, full_name)):
+                        raise ValueError(
+                            "Classroom, stream, academic year, and student are required."
                         )
-                    except ClassRoom.DoesNotExist:
-                        raise ValidationError(
-                            f"Row {i}: Classroom '{row_data['classroom_name']}' with stream '{row_data['stream_name']}' does not exist."
-                        )
-
-                    # Validate AcademicYear
-                    try:
-                        academic_year = AcademicYear.objects.get(
-                            name=row_data["academic_year"]
-                        )
-                    except AcademicYear.DoesNotExist:
-                        raise ValidationError(
-                            f"Row {i}: Academic year '{row_data['academic_year']}' does not exist."
-                        )
-
-                    # Validate Student by splitting the full name
-                    full_name = row_data["student_full_name"].strip().lower()
+                    classroom = ClassRoom.objects.get(
+                        school=school,
+                        name__name__iexact=classroom_name,
+                        stream__name__iexact=stream_name,
+                    )
+                    academic_year = AcademicYear.objects.get(name__iexact=year_name)
                     name_parts = full_name.split()
                     if len(name_parts) < 2:
-                        raise ValidationError(
-                            f"Row {i}: Student full name '{full_name}' must have at least a first name and last name."
+                        raise ValueError(
+                            "Student full name must include first and last names."
                         )
-
                     first_name, last_name = name_parts[0], name_parts[-1]
-
-                    try:
-                        student = Student.objects.get(
-                            first_name__iexact=first_name,
-                            last_name__iexact=last_name,
-                        )
-                    except Student.DoesNotExist:
-                        raise ValidationError(
-                            f"Row {i}: No student found with the name '{full_name}'."
-                        )
-
-                    # Validate that the classroom matches the student's class_level
+                    student = Student.objects.get(
+                        school=school,
+                        first_name__iexact=first_name,
+                        last_name__iexact=last_name,
+                    )
                     if classroom.name != student.class_level:
-                        raise ValidationError(
-                            f"Row {i}: The classroom '{row_data['classroom_name']}' does not match the student's class level '{student.class_level}'."
+                        raise ValueError(
+                            "The classroom does not match the student's class level."
                         )
-
-                    # Check for duplicate StudentClass
-                    if StudentClass.objects.filter(
+                    assignment_key = (classroom.pk, academic_year.pk, student.pk)
+                    if assignment_key in seen_assignments or StudentClass.objects.filter(
+                        school=school,
                         classroom=classroom,
                         academic_year=academic_year,
                         student=student,
                     ).exists():
-                        raise ValidationError(
-                            f"Row {i}: Student '{full_name}' is already assigned to this class in the given academic year."
+                        raise ValueError(
+                            "Student is already assigned to this classroom and year."
                         )
-
-                    # Check for class capacity
-                    if classroom.occupied_sits >= classroom.capacity:
-                        raise ValidationError(
-                            f"Row {i}: Classroom '{classroom}' has reached its capacity."
-                        )
-
-                    # Create StudentClass object
+                    next_occupancy = (
+                        classroom.occupied_sits
+                        + pending_per_classroom.get(classroom.pk, 0)
+                        + 1
+                    )
+                    if next_occupancy > classroom.capacity:
+                        raise ValueError(f"Classroom {classroom} has reached its capacity.")
                     student_class = StudentClass(
+                        school=school,
                         classroom=classroom,
                         academic_year=academic_year,
                         student=student,
                     )
                     student_classes_to_create.append(student_class)
+                    seen_assignments.add(assignment_key)
+                    pending_per_classroom[classroom.pk] = (
+                        pending_per_classroom.get(classroom.pk, 0) + 1
+                    )
+                except (
+                    ValueError,
+                    ObjectDoesNotExist,
+                    MultipleObjectsReturned,
+                    ValidationError,
+                ) as exc:
+                    rows_with_errors.append({"row": row_number, "errors": str(exc)})
 
-                except ValidationError as e:
-                    rows_with_errors.append({"row": i, "errors": str(e)})
-
-            # Bulk create valid records
-            StudentClass.objects.bulk_create(student_classes_to_create)
-
-            # Update the occupied_sits atomically for all classrooms
-            for student_class in student_classes_to_create:
-                student_class.classroom.occupied_sits += 1
-                student_class.classroom.save()
-
+            with transaction.atomic():
+                if student_classes_to_create:
+                    StudentClass.objects.bulk_create(student_classes_to_create)
+                    for classroom_id, count in pending_per_classroom.items():
+                        ClassRoom.objects.filter(
+                            school=school, pk=classroom_id
+                        ).update(occupied_sits=F("occupied_sits") + count)
             return Response(
                 {
                     "message": f"{len(student_classes_to_create)} student-class records successfully uploaded.",
@@ -469,6 +478,12 @@ class BulkUploadStudentClassView(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

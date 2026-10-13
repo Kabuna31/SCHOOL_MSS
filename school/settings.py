@@ -82,14 +82,6 @@ SHARED_APPS = [
 TENANT_APPS = [
     "jazzmin",
     "django.contrib.admin",
-    "django.contrib.contenttypes",
-    "django.contrib.auth",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "corsheaders",
-    "rest_framework",
-    "rest_framework_simplejwt",
     "academic.apps.AcademicConfig",
     "administration.apps.AdministrationConfig",
     "attendance.apps.AttendanceConfig",
@@ -98,7 +90,6 @@ TENANT_APPS = [
     "notes.apps.NotesConfig",
     "schedule.apps.ScheduleConfig",
     "sis.apps.SisConfig",
-    "users.apps.UsersConfig",
 ]
 
 if TENANCY_CONFIGURED:
@@ -135,6 +126,7 @@ MIDDLEWARE = [
     "api.middleware.CustomExceptionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "tenants.middleware.TenantMembershipMiddleware",
     'utils.middleware.CurrentRequestMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -240,7 +232,7 @@ REST_FRAMEWORK = {
     # permission_classes = [AllowAny].
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "tenants.authentication.SchoolJWTAuthentication",
     ),
     "EXCEPTION_HANDLER": "api.exceptions.custom_exception_handler",
 }

@@ -102,6 +102,8 @@ class AccessLog(models.Model):
 
 
 class Day(models.Model):
+    DEFAULT_DAY_NUMBERS = (1, 2, 3, 4, 5)
+
     DAY_CHOICES = (
         (1, "Monday"),
         (2, "Tuesday"),

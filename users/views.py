@@ -1,9 +1,10 @@
 import openpyxl
-from django.db.models import Q
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.contrib.auth.models import Group
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import FilterSet, CharFilter, DjangoFilterBackend
-from rest_framework import viewsets, views
+from rest_framework import views
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -12,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from utils.bulk_imports import date_value, get_request_school, iter_excel_rows, text_value
 
 from academic.models import Teacher, Subject, Parent
 from .models import CustomUser as User, Accountant
@@ -303,10 +305,6 @@ class TeacherDetailView(views.APIView):
 
 
 class BulkUploadTeachersView(APIView):
-    """
-    API View to handle bulk uploading of teachers from an Excel file.
-    """
-
     parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request, *args, **kwargs):
@@ -316,127 +314,155 @@ class BulkUploadTeachersView(APIView):
                 {"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        columns = [
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+            "employment_id",
+            "short_name",
+            "subject_specialization",
+            "address",
+            "gender",
+            "date_of_birth",
+            "salary",
+        ]
+        not_created = []
+        created_count = 0
+        seen_emails = set()
+        seen_employee_ids = set()
+        seen_short_names = set()
         try:
-            # Load the Excel file
-            workbook = openpyxl.load_workbook(file)
-            sheet = workbook.active  # Assuming data is in the first sheet
-
-            # Expected columns in the Excel file
-            columns = [
-                "first_name",
-                "middle_name",
-                "last_name",
-                "phone_number",
-                "employment_id",
-                "short_name",
-                "subject_specialization",  # Should match subject names as a comma-separated string
-                "address",
-                "gender",
-                "date_of_birth",
-                "salary",
-            ]
-
-            teachers_to_create = []
-            not_created = []
-
-            for i, row in enumerate(
-                sheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
-                # Map row data to the expected columns
-                teacher_data = dict(zip(columns, row))
-
+            for row_number, teacher_data in iter_excel_rows(file, columns):
                 try:
-                    # Generate email based on first_name and last_name
-                    generated_email = (
-                        f"{teacher_data['first_name'].lower()}."
-                        f"{teacher_data['last_name'].lower()}@hayatul.com"
-                    )
-                    teacher_data["email"] = generated_email
-
-                    # Check for duplicate email
-                    if Teacher.objects.filter(email=generated_email).exists():
-                        raise ValueError(f"Email '{generated_email}' already exists.")
-
-                    # Check for duplicate phone number
-                    if Teacher.objects.filter(
-                        phone_number=teacher_data["phone_number"]
-                    ).exists():
+                    first_name = text_value(teacher_data["first_name"]).lower()
+                    middle_name = text_value(teacher_data["middle_name"]).lower()
+                    last_name = text_value(teacher_data["last_name"]).lower()
+                    employment_id = text_value(teacher_data["employment_id"])
+                    short_name = text_value(teacher_data["short_name"]).upper()
+                    if not all((first_name, last_name, employment_id, short_name)):
                         raise ValueError(
-                            f"Phone number '{teacher_data['phone_number']}' already exists."
+                            "First name, last name, employment ID, and short name are required."
+                        )
+                    if len(short_name) > 3:
+                        raise ValueError("Short name must be at most 3 characters.")
+
+                    generated_email = f"{first_name}.{last_name}@hayatul.com"
+                    if (
+                        generated_email in seen_emails
+                        or employment_id in seen_employee_ids
+                        or short_name in seen_short_names
+                        or Teacher.objects.filter(
+                            school=school, empId=employment_id
+                        ).exists()
+                        or Teacher.objects.filter(
+                            school=school, short_name__iexact=short_name
+                        ).exists()
+                        or Teacher.objects.filter(
+                            school=school, email__iexact=generated_email
+                        ).exists()
+                    ):
+                        raise ValueError(
+                            "Email, employment ID, or short name already exists in this school or file."
                         )
 
-                    # Validate subject specialization
-                    subjects = []
-                    subject_names = (
-                        teacher_data["subject_specialization"].lower().split(",")
-                        if teacher_data["subject_specialization"].lower()
-                        else []
+                    subject_names = [
+                        name.strip().lower()
+                        for name in text_value(
+                            teacher_data["subject_specialization"]
+                        ).split(",")
+                        if name.strip()
+                    ]
+                    subjects = [
+                        Subject.objects.get(school=school, name__iexact=name)
+                        for name in subject_names
+                    ]
+                    date_of_birth = (
+                        date_value(teacher_data["date_of_birth"], "Date of birth")
+                        if teacher_data["date_of_birth"]
+                        else None
                     )
-                    for subject_name in subject_names:
-                        try:
-                            subject = Subject.objects.get(name=subject_name.strip())
-                            subjects.append(subject)
-                        except Subject.DoesNotExist:
+                    salary_text = text_value(teacher_data["salary"])
+                    salary = int(salary_text) if salary_text else None
+
+                    with transaction.atomic():
+                        user = User.objects.filter(email=generated_email).first()
+                        if user is not None and user.school_id != school.pk:
                             raise ValueError(
-                                f"Subject '{subject_name.strip()}' does not exist."
+                                "The generated login email is already assigned to another school."
+                            )
+                        if user is None:
+                            user = User(
+                                email=generated_email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                school=school,
+                                is_teacher=True,
+                            )
+                            user.set_unusable_password()
+                            user.save()
+                            group, _ = Group.objects.get_or_create(name="teacher")
+                            user.groups.add(group)
+                        else:
+                            user.first_name = first_name
+                            user.last_name = last_name
+                            user.is_teacher = True
+                            user.save(
+                                update_fields=["first_name", "last_name", "is_teacher"]
                             )
 
-                    # Create Teacher object
-                    teacher = Teacher(
-                        first_name=teacher_data["first_name"].lower(),
-                        middle_name=teacher_data["middle_name"].lower(),
-                        last_name=teacher_data["last_name"].lower(),
-                        email=generated_email,
-                        short_name=teacher_data["short_name"].upper(),
-                        phone_number=teacher_data["phone_number"],
-                        empId=teacher_data["employment_id"],
-                        address=teacher_data["address"].lower(),
-                        gender=teacher_data["gender"],
-                        date_of_birth=teacher_data["date_of_birth"],
-                        salary=teacher_data["salary"],
-                    )
-                    teacher.save()
-
-                    # Assign subjects
-                    if subjects:
+                        teacher = Teacher(
+                            school=school,
+                            user=user,
+                            first_name=first_name,
+                            middle_name=middle_name,
+                            last_name=last_name,
+                            email=generated_email,
+                            short_name=short_name,
+                            phone_number=text_value(teacher_data["phone_number"]),
+                            empId=employment_id,
+                            address=text_value(teacher_data["address"]).lower(),
+                            gender=text_value(teacher_data["gender"]),
+                            date_of_birth=date_of_birth,
+                            salary=salary,
+                        )
+                        teacher.save()
                         teacher.subject_specialization.set(subjects)
 
-                    # Create corresponding user
-                    if not teacher.username:
-                        teacher.username = f"{teacher.first_name.lower()}{teacher.last_name.lower()}{get_random_string(4)}"
-                    teacher.save()
-
-                    user, created = User.objects.get_or_create(
-                        email=teacher.email,
-                        defaults={
-                            "first_name": teacher.first_name,
-                            "last_name": teacher.last_name,
-                            "is_teacher": True,
-                        },
+                    created_count += 1
+                    seen_emails.add(generated_email)
+                    seen_employee_ids.add(employment_id)
+                    seen_short_names.add(short_name)
+                except (
+                    ValueError,
+                    ObjectDoesNotExist,
+                    MultipleObjectsReturned,
+                    IntegrityError,
+                ) as exc:
+                    not_created.append(
+                        {"row": row_number, "data": teacher_data, "error": str(exc)}
                     )
-                    if created:
-                        default_password = f"Complex.{teacher.empId[-4:] if teacher.empId and len(teacher.empId) >= 4 else '0000'}"
-                        user.set_password(default_password)
-                        user.save()
-
-                        # Add to "teacher" group
-                        group, _ = Group.objects.get_or_create(name="teacher")
-                        user.groups.add(group)
-
-                    teachers_to_create.append(teacher)
-
-                except Exception as e:
-                    # Add row data and error message to the not_created list
-                    teacher_data["error"] = str(e)
-                    not_created.append(teacher_data)
 
             return Response(
                 {
-                    "message": f"{len(teachers_to_create)} teachers successfully uploaded.",
+                    "message": f"{created_count} teachers successfully uploaded.",
                     "not_created": not_created,
                 },
                 status=status.HTTP_201_CREATED,
             )
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

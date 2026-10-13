@@ -1,4 +1,7 @@
 import openpyxl
+import re
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist, ValidationError
+from django.db import IntegrityError
 from django.db import transaction
 from django_filters.rest_framework import FilterSet, CharFilter, DjangoFilterBackend
 from rest_framework import views
@@ -12,6 +15,7 @@ from django.http import Http404
 
 from academic.models import Student, ClassLevel, Parent
 from .serializers import StudentSerializer
+from utils.bulk_imports import get_request_school, iter_excel_rows, text_value
 
 # Students filter
 
@@ -85,148 +89,148 @@ class BulkUploadStudentsView(APIView):
                 {"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        columns = [
+            "first_name",
+            "middle_name",
+            "last_name",
+            "admission_number",
+            "parent_contact",
+            "religion",
+            "class_level",
+            "gender",
+        ]
+        not_created = []
+        created_students = []
+        new_parents_created = 0
+        updated_students_info = []
+        skipped_students = []
+        seen_admission_numbers = set()
         try:
-            workbook = openpyxl.load_workbook(file)
-            sheet = workbook.active
-
-            columns = [
-                "first_name",
-                "middle_name",
-                "last_name",
-                "admission_number",
-                "parent_contact",
-                "religion",
-                "class_level",
-                "gender",
-            ]
-
-            students_to_create = []
-            not_created = []
-            created_students = []
-            new_parents_created = 0
-            updated_students_info = []
-            skipped_students = []
-
-            for i, row in enumerate(
-                sheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
-                student_data = dict(zip(columns, row))
-
-                # Normalize names
-                first_name = (student_data["first_name"] or "").lower()
-                middle_name = (student_data["middle_name"] or "").lower()
-                last_name = (student_data["last_name"] or "").lower()
-
+            for row_number, student_data in iter_excel_rows(file, columns):
+                new_parent_created = False
                 try:
-                    class_level = ClassLevel.objects.get(
-                        name=student_data["class_level"]
-                    )
-                    parent_contact = student_data["parent_contact"]
-                    parent = None
-                    update_reasons = []
-
-                    if parent_contact:
-                        parent, parent_created = Parent.objects.get_or_create(
-                            phone_number=parent_contact,
-                            defaults={
-                                "first_name": middle_name,
-                                "last_name": last_name,
-                                "email": f"parent_of_{first_name}_{middle_name}_{last_name}@hayatul.com",
-                            },
+                    first_name = text_value(student_data["first_name"]).lower()
+                    middle_name = text_value(student_data["middle_name"]).lower()
+                    last_name = text_value(student_data["last_name"]).lower()
+                    admission_number = text_value(student_data["admission_number"])
+                    parent_contact = text_value(student_data["parent_contact"])
+                    class_name = text_value(student_data["class_level"])
+                    gender = text_value(student_data["gender"])
+                    if not all((first_name, last_name, admission_number, parent_contact, class_name, gender)):
+                        raise ValueError(
+                            "First name, last name, admission number, parent contact, class, and gender are required."
                         )
-                        if parent_created:
-                            new_parents_created += 1
-
-                    admission_number = student_data["admission_number"]
-                    student_exists = Student.objects.filter(
-                        admission_number=admission_number
-                    ).first()
-
-                    if student_exists:
-                        # Track updates to existing students
-                        updated = False
-
-                        if not student_exists.parent_guardian and parent:
-                            student_exists.parent_guardian = parent
-                            update_reasons.append("parent added")
-                            updated = True
-
-                        existing_sibling = (
-                            Student.objects.filter(parent_contact=parent_contact)
-                            .exclude(id=student_exists.id)
-                            .first()
+                    if admission_number in seen_admission_numbers:
+                        raise ValueError(
+                            f"Admission number {admission_number!r} is duplicated in this file."
                         )
-                        if (
-                            existing_sibling
-                            and not student_exists.siblings.filter(
-                                id=existing_sibling.id
-                            ).exists()
-                        ):
-                            student_exists.siblings.add(existing_sibling)
-                            existing_sibling.siblings.add(student_exists)
-                            update_reasons.append("sibling added")
-                            updated = True
-
-                        if updated:
-                            student_exists.save()
-                            updated_students_info.append(
-                                {
-                                    "admission_number": admission_number,
-                                    "full_name": f"{student_exists.first_name} {student_exists.last_name}",
-                                    "reasons": update_reasons,
-                                }
+                    with transaction.atomic():
+                        class_level = ClassLevel.objects.get(
+                            school=school, name__iexact=class_name
+                        )
+                        parent = Parent.objects.filter(
+                            school=school, phone_number=parent_contact
+                        ).first()
+                        if parent is None:
+                            phone_digits = re.sub(r"\D", "", parent_contact)
+                            parent = Parent(
+                                school=school,
+                                phone_number=parent_contact,
+                                first_name=middle_name or first_name,
+                                last_name=last_name,
+                                email=f"parent_{school.pk}_{phone_digits}@hayatul.com",
                             )
+                            parent.save()
+                            if parent.user_id:
+                                parent.user.set_unusable_password()
+                                parent.user.save(update_fields=["password"])
+                            new_parent_created = True
+
+                        student_exists = Student.objects.filter(
+                            school=school, admission_number=admission_number
+                        ).first()
+                        if student_exists:
+                            update_reasons = []
+                            if not student_exists.parent_guardian_id:
+                                student_exists.parent_guardian = parent
+                                update_reasons.append("parent added")
+                            existing_sibling = (
+                                Student.objects.filter(
+                                    school=school, parent_contact=parent_contact
+                                )
+                                .exclude(pk=student_exists.pk)
+                                .first()
+                            )
+                            if existing_sibling and not student_exists.siblings.filter(
+                                pk=existing_sibling.pk
+                            ).exists():
+                                student_exists.siblings.add(existing_sibling)
+                                existing_sibling.siblings.add(student_exists)
+                                update_reasons.append("sibling added")
+                            if update_reasons:
+                                student_exists.save()
+                                updated_students_info.append(
+                                    {
+                                        "admission_number": admission_number,
+                                        "full_name": (
+                                            f"{student_exists.first_name} "
+                                            f"{student_exists.last_name}"
+                                        ),
+                                        "reasons": update_reasons,
+                                    }
+                                )
+                            else:
+                                skipped_students.append(
+                                    {
+                                        "admission_number": admission_number,
+                                        "full_name": (
+                                            f"{student_exists.first_name} "
+                                            f"{student_exists.last_name}"
+                                        ),
+                                        "reason": "Student already exists and no updates were needed.",
+                                    }
+                                )
                         else:
-                            skipped_students.append(
-                                {
-                                    "admission_number": admission_number,
-                                    "full_name": f"{student_exists.first_name} {student_exists.last_name}",
-                                    "reason": "Student already exists and no updates were needed.",
-                                }
+                            student = Student(
+                                school=school,
+                                first_name=first_name,
+                                middle_name=middle_name,
+                                last_name=last_name,
+                                admission_number=admission_number,
+                                parent_contact=parent_contact,
+                                religion=text_value(student_data["religion"]),
+                                class_level=class_level,
+                                gender=gender,
+                                parent_guardian=parent,
                             )
-                        continue  # Skip creating duplicate
-
-                    # Prepare new student
-                    student = Student(
-                        first_name=first_name,
-                        middle_name=middle_name,
-                        last_name=last_name,
-                        admission_number=admission_number,
-                        parent_contact=parent_contact,
-                        religion=student_data["religion"],
-                        class_level=class_level,
-                        gender=student_data["gender"],
-                        parent_guardian=parent,
+                            existing_sibling = Student.objects.filter(
+                                school=school, parent_contact=parent_contact
+                            ).first()
+                            student.save()
+                            if existing_sibling and existing_sibling.pk != student.pk:
+                                student.siblings.add(existing_sibling)
+                                existing_sibling.siblings.add(student)
+                            created_students.append(student)
+                    seen_admission_numbers.add(admission_number)
+                    if new_parent_created:
+                        new_parents_created += 1
+                except (
+                    ValueError,
+                    ObjectDoesNotExist,
+                    MultipleObjectsReturned,
+                    ValidationError,
+                    IntegrityError,
+                ) as exc:
+                    not_created.append(
+                        {"row": row_number, "data": student_data, "error": str(exc)}
                     )
-
-                    existing_sibling = Student.objects.filter(
-                        parent_contact=parent_contact
-                    ).first()
-                    students_to_create.append((student, existing_sibling))
-
-                except Exception as e:
-                    student_data["error"] = str(e)
-                    not_created.append(student_data)
-
-            # Save new students
-            with transaction.atomic():
-                for student, existing_sibling in students_to_create:
-                    student.save()
-                    created_students.append(student)
-
-                    if (
-                        existing_sibling
-                        and not student.siblings.filter(id=existing_sibling.id).exists()
-                    ):
-                        student.siblings.add(existing_sibling)
-                        existing_sibling.siblings.add(student)
-                        updated_students_info.append(
-                            {
-                                "admission_number": student.admission_number,
-                                "full_name": f"{student.first_name} {student.last_name}",
-                                "reasons": ["sibling added"],
-                            }
-                        )
 
             return Response(
                 {
@@ -237,9 +241,15 @@ class BulkUploadStudentsView(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 """

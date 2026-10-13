@@ -74,6 +74,8 @@ class Command(BaseCommand):
                 for field in school._meta.concrete_fields
             }
             day_data = list(Day.objects.values_list("day", flat=True))
+            if not day_data:
+                day_data = Day.DEFAULT_DAY_NUMBERS
 
             with schema_context(tenant.schema_name):
                 School.objects.create(**school_data)

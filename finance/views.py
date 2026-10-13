@@ -1,6 +1,7 @@
 import openpyxl
 from openpyxl.styles import Font
-from django.db import transaction
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import (
@@ -15,6 +16,13 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from utils.bulk_imports import (
+    date_value,
+    decimal_value,
+    get_request_school,
+    iter_excel_rows,
+    text_value,
+)
 
 from academic.models import Student
 from administration.models import Term
@@ -484,10 +492,14 @@ class ReceiptBulkUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            workbook = openpyxl.load_workbook(file)
-            sheet = workbook.active
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        try:
             columns = [
                 "payer",
                 "first_name",
@@ -505,28 +517,31 @@ class ReceiptBulkUploadView(APIView):
             skipped_receipts = []
             not_created = []
 
-            for i, row in enumerate(
-                sheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
+            for i, data in iter_excel_rows(file, columns):
                 try:
-                    data = dict(zip(columns, row))
-
                     # Normalize and extract names
-                    first_name = (data.get("first_name") or "").strip().lower()
-                    middle_name = (data.get("middle_name") or "").strip().lower()
-                    last_name = (data.get("last_name") or "").strip().lower()
-                    payer = (data.get("payer") or "").strip()
-                    paid_for_name = (data.get("paid_for") or "").strip()
-                    term_str = (data.get("term") or "").strip()
-                    paid_through = (data.get("paid_through") or "").strip()
-                    payment_date = data.get("payment_date")
-                    amount = data.get("amount")
+                    first_name = text_value(data.get("first_name")).lower()
+                    middle_name = text_value(data.get("middle_name")).lower()
+                    last_name = text_value(data.get("last_name")).lower()
+                    payer = text_value(data.get("payer"))
+                    paid_for_name = text_value(data.get("paid_for"))
+                    term_str = text_value(data.get("term"))
+                    paid_through = text_value(data.get("paid_through"))
+                    payment_date = date_value(data.get("payment_date"), "Payment date")
+                    amount = decimal_value(data.get("amount"), "Amount")
 
                     if not (first_name and last_name and paid_for_name and term_str):
                         raise ValueError("Missing required fields.")
+                    if amount <= 0:
+                        raise ValueError("Amount must be greater than zero.")
+                    if paid_through and paid_through not in {
+                        choice[0] for choice in Receipt._meta.get_field("paid_through").choices
+                    }:
+                        raise ValueError("Payment method is not supported.")
 
                     # Lookup student
                     student = Student.objects.filter(
+                        school=school,
                         first_name__iexact=first_name,
                         middle_name__iexact=middle_name,
                         last_name__iexact=last_name,
@@ -545,7 +560,7 @@ class ReceiptBulkUploadView(APIView):
 
                     # Lookup paid_for
                     paid_for = ReceiptAllocation.objects.filter(
-                        name__iexact=paid_for_name
+                        school=school, name__iexact=paid_for_name
                     ).first()
                     if not paid_for:
                         raise ValueError(
@@ -557,13 +572,16 @@ class ReceiptBulkUploadView(APIView):
                         raise ValueError("Term must be in format 'Term 1-2024'.")
                     term_name, year = term_str.split("-")
                     term = Term.objects.filter(
-                        name__iexact=term_name.strip(), academic_year__name=year.strip()
+                        name__iexact=term_name.strip(),
+                        academic_year__name=year.strip(),
+                        academic_year__school=school,
                     ).first()
                     if not term:
                         raise ValueError(f"Term '{term_str}' not found.")
 
                     # Check duplicate
                     existing = Receipt.objects.filter(
+                        school=school,
                         student=student,
                         paid_for=paid_for,
                         payment_date=payment_date,
@@ -583,6 +601,7 @@ class ReceiptBulkUploadView(APIView):
                     # Create receipt
                     with transaction.atomic():
                         receipt = Receipt.objects.create(
+                            school=school,
                             payer=payer,
                             student=student,
                             paid_for=paid_for,
@@ -594,9 +613,15 @@ class ReceiptBulkUploadView(APIView):
                         )
                         created_receipts.append(receipt)
 
-                except Exception as e:
-                    data["error"] = str(e)
-                    not_created.append(data)
+                except (
+                    ValueError,
+                    ObjectDoesNotExist,
+                    MultipleObjectsReturned,
+                    IntegrityError,
+                ) as exc:
+                    not_created.append(
+                        {"row": i, "data": data, "error": str(exc)}
+                    )
 
             return Response(
                 {
@@ -608,8 +633,15 @@ class ReceiptBulkUploadView(APIView):
                 status=status.HTTP_201_CREATED,
             )
 
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 def download_receipt_template(request):

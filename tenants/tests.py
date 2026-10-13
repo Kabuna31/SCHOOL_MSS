@@ -4,12 +4,51 @@ from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 from django.urls import resolve
 from django_tenants.urlresolvers import get_subfolder_urlconf
 
+from utils.middleware import CurrentRequestMiddleware, get_current_request
+
 
 class TenantManagementCommandTests(SimpleTestCase):
+    def test_login_and_authentication_apps_are_shared_only(self):
+        for app in (
+            "django.contrib.auth",
+            "django.contrib.contenttypes",
+            "django.contrib.sessions",
+            "users.apps.UsersConfig",
+        ):
+            with self.subTest(app=app):
+                self.assertIn(app, settings.SHARED_APPS)
+                self.assertNotIn(app, settings.TENANT_APPS)
+
+    def test_school_business_apps_are_tenant_apps(self):
+        for app in (
+            "academic.apps.AcademicConfig",
+            "attendance.apps.AttendanceConfig",
+            "examination.apps.ExaminationConfig",
+            "finance.apps.FinanceConfig",
+            "notes.apps.NotesConfig",
+            "schedule.apps.ScheduleConfig",
+            "sis.apps.SisConfig",
+        ):
+            with self.subTest(app=app):
+                self.assertIn(app, settings.TENANT_APPS)
+
+    def test_current_request_is_cleared_when_request_processing_raises(self):
+        request = object()
+
+        def fail(_request):
+            raise RuntimeError("request failed")
+
+        middleware = CurrentRequestMiddleware(fail)
+        with self.assertRaisesMessage(RuntimeError, "request failed"):
+            middleware(request)
+
+        self.assertIsNone(get_current_request())
+
     @override_settings(TENANT_SUBFOLDER_PREFIX="t")
     def test_tenant_urlconf_is_mounted_under_render_hostname_path(self):
         tenant_urlconf = get_subfolder_urlconf(

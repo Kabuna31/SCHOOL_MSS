@@ -116,3 +116,48 @@ business records. Deployments run
 `migrate_deployment`, which uses Django migrations in legacy mode and
 `migrate_schemas` during preparation or when schema tenancy is enabled. WSGI
 startup does not run migrations.
+
+Authentication and user identities remain shared in the public schema.
+Academic, attendance, examination, finance, notes, schedule, and SIS models are
+created in tenant schemas. The administration app is present in both schemas:
+the public `School` record is the tenant registry source, and provisioning
+copies its school metadata and weekdays into the school schema. Keep tenant
+routing disabled until a school schema is provisioned and tenant login,
+permissions, and school-data isolation have been tested on PostgreSQL.
+
+### School Excel bulk imports
+
+Tenant bulk-import endpoints are under `/t/<tenant-slug>/api/` and accept an
+`.xlsx` workbook as multipart form field `file`. The first worksheet is used;
+its first row is treated as a header, and each following row must put values in
+the order below. Use the listed names as headers for clarity. Imports require
+an authenticated user associated with that school; school events additionally
+require an admin user.
+
+| Import | Endpoint suffix | Column order |
+| --- | --- | --- |
+| Subjects | `academic/subjects/bulk-upload/` | `name`, `subject_code`, `department` |
+| Teachers | `users/teachers/bulk-upload/` | `first_name`, `middle_name`, `last_name`, `phone_number`, `employment_id`, `short_name`, `subject_specialization`, `address`, `gender`, `date_of_birth`, `salary` |
+| Classrooms | `academic/classrooms/bulk-upload/` | `name`, `stream`, `class_teacher` |
+| Students | `sis/students/bulk-upload/` | `first_name`, `middle_name`, `last_name`, `admission_number`, `parent_contact`, `religion`, `class_level`, `gender` |
+| Student-class enrollment | `academic/student-classes/bulk-upload/` | `classroom_name`, `stream_name`, `academic_year`, `student_full_name` |
+| Receipts | `finance/receipts/bulk-upload/` | `payer`, `first_name`, `middle_name`, `last_name`, `paid_for`, `paid_through`, `payment_date`, `term`, `amount` |
+| School events | `administration/school-events/bulk-upload/` | `name`, `event_type`, `term_id`, `start_date`, `end_date`, `description` |
+
+Create reference records before importing rows that depend on them: departments
+and class levels, streams, academic years, terms, and receipt allocations must
+already exist. Import subjects before teachers; classrooms need their class,
+stream, and class teacher; students need their class level; enrollments need
+students and classrooms; receipts need students, receipt allocations, and
+terms. School events need a valid term ID. Teacher subject specializations
+are comma-separated subject names. Dates should use Excel dates or
+`YYYY-MM-DD`; receipt terms use `Term 1-2024` format, matching the term name
+and academic-year name in the school.
+
+Rows are validated independently. Invalid rows are reported in the response
+instead of preventing unrelated valid rows from being imported; check the
+response's `not_created` or equivalent error list before treating an upload as
+complete. Imported teacher accounts use the generated address
+`first.last@hayatul.com` and have no usable password until an administrator
+completes the account setup or password-reset process. Parent accounts created
+by student imports also require account setup before login.
