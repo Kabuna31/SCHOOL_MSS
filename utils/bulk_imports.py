@@ -2,8 +2,41 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import openpyxl
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Font
+from django.http import HttpResponse
 from django.utils.dateparse import parse_date
 from zipfile import BadZipFile
+
+
+def excel_response(filename, worksheet_name, headers, rows):
+    workbook = openpyxl.Workbook(write_only=True)
+    worksheet = workbook.create_sheet(title=worksheet_name)
+    header_cells = []
+    for header in headers:
+        cell = WriteOnlyCell(worksheet, value=header)
+        cell.font = Font(bold=True)
+        header_cells.append(cell)
+    worksheet.append(header_cells)
+
+    for row in rows:
+        cells = []
+        for value in row:
+            cell = WriteOnlyCell(worksheet, value=value)
+            if isinstance(value, str):
+                cell.data_type = "s"
+            cells.append(cell)
+        worksheet.append(cells)
+
+    response = HttpResponse(
+        content_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    workbook.save(response)
+    return response
 
 
 def get_request_school(request):

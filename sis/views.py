@@ -15,7 +15,12 @@ from django.http import Http404
 
 from academic.models import Student, ClassLevel, Parent
 from .serializers import StudentSerializer
-from utils.bulk_imports import get_request_school, iter_excel_rows, text_value
+from utils.bulk_imports import (
+    excel_response,
+    get_request_school,
+    iter_excel_rows,
+    text_value,
+)
 
 # Students filter
 
@@ -250,6 +255,48 @@ class BulkUploadStudentsView(APIView):
                 {"error": f"Invalid Excel file: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class StudentsExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        students = Student.objects.filter(school=school).select_related("class_level")
+        rows = (
+            (
+                student.first_name,
+                student.middle_name,
+                student.last_name,
+                student.admission_number,
+                student.parent_contact,
+                student.religion,
+                student.class_level.name if student.class_level else "",
+                student.gender,
+            )
+            for student in students
+        )
+        return excel_response(
+            "students.xlsx",
+            "Students",
+            [
+                "first_name",
+                "middle_name",
+                "last_name",
+                "admission_number",
+                "parent_contact",
+                "religion",
+                "class_level",
+                "gender",
+            ],
+            rows,
+        )
 
 
 """

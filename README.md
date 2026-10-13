@@ -125,7 +125,7 @@ copies its school metadata and weekdays into the school schema. Keep tenant
 routing disabled until a school schema is provisioned and tenant login,
 permissions, and school-data isolation have been tested on PostgreSQL.
 
-### School Excel bulk imports
+### School Excel bulk import and export
 
 Tenant bulk-import endpoints are under `/t/<tenant-slug>/api/` and accept an
 `.xlsx` workbook as multipart form field `file`. The first worksheet is used;
@@ -134,30 +134,44 @@ the order below. Use the listed names as headers for clarity. Imports require
 an authenticated user associated with that school; school events additionally
 require an admin user.
 
-| Import | Endpoint suffix | Column order |
-| --- | --- | --- |
-| Subjects | `academic/subjects/bulk-upload/` | `name`, `subject_code`, `department` |
-| Teachers | `users/teachers/bulk-upload/` | `first_name`, `middle_name`, `last_name`, `phone_number`, `employment_id`, `short_name`, `subject_specialization`, `address`, `gender`, `date_of_birth`, `salary` |
-| Classrooms | `academic/classrooms/bulk-upload/` | `name`, `stream`, `class_teacher` |
-| Students | `sis/students/bulk-upload/` | `first_name`, `middle_name`, `last_name`, `admission_number`, `parent_contact`, `religion`, `class_level`, `gender` |
-| Student-class enrollment | `academic/student-classes/bulk-upload/` | `classroom_name`, `stream_name`, `academic_year`, `student_full_name` |
-| Receipts | `finance/receipts/bulk-upload/` | `payer`, `first_name`, `middle_name`, `last_name`, `paid_for`, `paid_through`, `payment_date`, `term`, `amount` |
-| School events | `administration/school-events/bulk-upload/` | `name`, `event_type`, `term_id`, `start_date`, `end_date`, `description` |
+| Data | Import endpoint suffix | Export endpoint suffix | Import column order |
+| --- | --- | --- | --- |
+| Users | `users/users/bulk-upload/` | `users/users/export/` | `email`, `first_name`, `middle_name`, `last_name` |
+| Teachers | `users/teachers/bulk-upload/` | `users/teachers/export/` | `first_name`, `middle_name`, `last_name`, `phone_number`, `employment_id`, `short_name`, `subject_specialization`, `address`, `gender`, `date_of_birth`, `salary`, `email` |
+| Subjects | `academic/subjects/bulk-upload/` | `academic/subjects/export/` | `name`, `subject_code`, `department` |
+| Classrooms | `academic/classrooms/bulk-upload/` | `academic/classrooms/export/` | `name`, `stream`, `class_teacher` |
+| Students | `sis/students/bulk-upload/` | `sis/students/export/` | `first_name`, `middle_name`, `last_name`, `admission_number`, `parent_contact`, `religion`, `class_level`, `gender` |
+| Student-class enrollment | `academic/student-classes/bulk-upload/` | `academic/student-classes/export/` | `classroom_name`, `stream_name`, `academic_year`, `student_full_name`, `student_admission_number` |
+| Marks | `examination/marks/bulk-upload/` | `examination/marks/export/` | `exam_name`, `student_admission_number`, `classroom_name`, `stream_name`, `academic_year`, `subject_code`, `points_scored`, `created_by_emp_id` |
+| Receipts | `finance/receipts/bulk-upload/` | `finance/receipts/export/` | `payer`, `first_name`, `middle_name`, `last_name`, `paid_for`, `paid_through`, `payment_date`, `term`, `amount` |
+| School events | `administration/school-events/bulk-upload/` | `administration/school-events/export/` | `name`, `event_type`, `term_id`, `start_date`, `end_date`, `description` |
+
+Export endpoints return `.xlsx` attachments scoped to the authenticated user's
+school. The Users export matches the user-management list (parents have their
+own endpoint) and never includes passwords. User imports accept names and
+email only: they assign the current school, grant no role, and create an
+unusable password that an administrator must set up. Teacher imports use the
+optional email in the last column when supplied; otherwise it is generated as
+`first.last@hayatul.com`. Imported teacher accounts also have unusable
+passwords until account setup or a password reset.
 
 Create reference records before importing rows that depend on them: departments
 and class levels, streams, academic years, terms, and receipt allocations must
 already exist. Import subjects before teachers; classrooms need their class,
-stream, and class teacher; students need their class level; enrollments need
-students and classrooms; receipts need students, receipt allocations, and
-terms. School events need a valid term ID. Teacher subject specializations
-are comma-separated subject names. Dates should use Excel dates or
-`YYYY-MM-DD`; receipt terms use `Term 1-2024` format, matching the term name
-and academic-year name in the school.
+stream, and class teacher (identified by employment ID or full name); students
+need their class level; enrollments need students and classrooms; marks need an
+exam assigned to the class, a student enrollment, subject, academic year, and
+teacher. A teacher uploading marks is recorded as the creator; administrators
+must provide a same-school teacher's employment ID in `created_by_emp_id`.
+Receipts need students, receipt allocations, and terms. School events need a
+valid term ID. Teacher subject specializations are comma-separated subject
+names. Dates should use Excel dates or `YYYY-MM-DD`; receipt terms use
+`Term 1-2024` format, matching the term name and academic-year name in the
+school. Student-class imports can match by `student_admission_number`; if it
+is blank, they use `student_full_name`.
 
 Rows are validated independently. Invalid rows are reported in the response
 instead of preventing unrelated valid rows from being imported; check the
 response's `not_created` or equivalent error list before treating an upload as
-complete. Imported teacher accounts use the generated address
-`first.last@hayatul.com` and have no usable password until an administrator
-completes the account setup or password-reset process. Parent accounts created
-by student imports also require account setup before login.
+complete. Parent accounts created by student imports also require account
+setup before login.

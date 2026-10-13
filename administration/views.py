@@ -6,7 +6,13 @@ from rest_framework import generics, viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from utils.bulk_imports import date_value, get_request_school, iter_excel_rows, text_value
+from utils.bulk_imports import (
+    date_value,
+    excel_response,
+    get_request_school,
+    iter_excel_rows,
+    text_value,
+)
 from .models import AcademicYear, Term, Article, CarouselImage, SchoolEvent
 from .serializers import (
     AcademicYearSerializer,
@@ -172,6 +178,39 @@ class SchoolEventBulkUploadView(APIView):
                 {"error": f"Invalid Excel file: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class SchoolEventExportView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        events = SchoolEvent.objects.filter(
+            term__academic_year__school=school
+        ).select_related("term")
+        rows = (
+            (
+                event.name,
+                event.event_type,
+                event.term_id,
+                event.start_date,
+                event.end_date,
+                event.description,
+            )
+            for event in events
+        )
+        return excel_response(
+            "school_events.xlsx",
+            "School Events",
+            ["name", "event_type", "term_id", "start_date", "end_date", "description"],
+            rows,
+        )
 
 
 class SchoolEventTemplateDownloadView(APIView):

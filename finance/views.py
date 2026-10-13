@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from utils.bulk_imports import (
     date_value,
     decimal_value,
+    excel_response,
     get_request_school,
     iter_excel_rows,
     text_value,
@@ -642,6 +643,56 @@ class ReceiptBulkUploadView(APIView):
                 {"error": f"Invalid Excel file: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class ReceiptsExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        receipts = Receipt.objects.filter(school=school).select_related(
+            "student", "paid_for", "term", "term__academic_year"
+        )
+        rows = (
+            (
+                receipt.payer,
+                receipt.student.first_name if receipt.student else "",
+                receipt.student.middle_name if receipt.student else "",
+                receipt.student.last_name if receipt.student else "",
+                receipt.paid_for.name if receipt.paid_for else "",
+                receipt.paid_through,
+                receipt.payment_date,
+                (
+                    f"{receipt.term.name}-{receipt.term.academic_year.name}"
+                    if receipt.term
+                    else ""
+                ),
+                receipt.amount,
+            )
+            for receipt in receipts
+        )
+        return excel_response(
+            "receipts.xlsx",
+            "Receipts",
+            [
+                "payer",
+                "first_name",
+                "middle_name",
+                "last_name",
+                "paid_for",
+                "paid_through",
+                "payment_date",
+                "term",
+                "amount",
+            ],
+            rows,
+        )
 
 
 def download_receipt_template(request):

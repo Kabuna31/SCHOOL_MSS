@@ -3,8 +3,10 @@ from academic.views import (
     SubjectListView,
     SubjectDetailView,
     BulkUploadSubjectsView,
+    SubjectsExportView,
     ClassRoomView,
     BulkUploadClassRoomsView,
+    ClassRoomsExportView,
     DepartmentListCreateView,
     DepartmentDetailView,
     ClassLevelListCreateView,
@@ -20,6 +22,7 @@ from academic.views import (
     StudentClassListCreateView,
     StudentClassDetailView,
     BulkUploadStudentClassView,
+    StudentClassesExportView,
 )
 
 
@@ -85,11 +88,17 @@ urlpatterns = [
         BulkUploadSubjectsView.as_view(),
         name="subject-bulk-upload",
     ),
+    path("subjects/export/", SubjectsExportView.as_view(), name="subject-export"),
     path("classrooms/", ClassRoomView.as_view(), name="classroom-list"),
     path(
         "classrooms/bulk-upload/",
         BulkUploadClassRoomsView.as_view(),
         name="bulk-upload-classrooms",
+    ),
+    path(
+        "classrooms/export/",
+        ClassRoomsExportView.as_view(),
+        name="classrooms-export",
     ),
     # StudentClass URLs
     path(
@@ -106,5 +115,10 @@ urlpatterns = [
         "student-classes/bulk-upload/",
         BulkUploadStudentClassView.as_view(),
         name="student-class-bulk-upload",
+    ),
+    path(
+        "student-classes/export/",
+        StudentClassesExportView.as_view(),
+        name="student-classes-export",
     ),
 ]

@@ -33,7 +33,12 @@ from .serializers import (
     ClassRoomSerializer,
     StudentClassEnrollmentSerializer,
 )
-from utils.bulk_imports import get_request_school, iter_excel_rows, text_value
+from utils.bulk_imports import (
+    excel_response,
+    get_request_school,
+    iter_excel_rows,
+    text_value,
+)
 
 
 # Department Views
@@ -271,8 +276,10 @@ class BulkUploadClassRoomsView(APIView):
                 try:
                     class_name = text_value(classroom_data["name"]).lower()
                     stream_name = text_value(classroom_data["stream"]).upper()
-                    teacher_name = text_value(classroom_data["class_teacher"]).lower()
-                    if not class_name or not stream_name or not teacher_name:
+                    teacher_reference = text_value(
+                        classroom_data["class_teacher"]
+                    )
+                    if not class_name or not stream_name or not teacher_reference:
                         raise ValueError(
                             "Class, stream, and class teacher are required."
                         )
@@ -290,16 +297,20 @@ class BulkUploadClassRoomsView(APIView):
                             "Classroom with this class and stream already exists."
                         )
 
-                    teacher_name_parts = teacher_name.split()
-                    if len(teacher_name_parts) < 2:
-                        raise ValueError(
-                            "Class teacher name must include both first and last name."
+                    class_teacher = Teacher.objects.filter(
+                        school=school, empId__iexact=teacher_reference
+                    ).first()
+                    if class_teacher is None:
+                        teacher_name_parts = teacher_reference.lower().split()
+                        if len(teacher_name_parts) < 2:
+                            raise ValueError(
+                                "Class teacher must be identified by employment ID or full name."
+                            )
+                        class_teacher = Teacher.objects.get(
+                            school=school,
+                            first_name__iexact=teacher_name_parts[0],
+                            last_name__iexact=teacher_name_parts[-1],
                         )
-                    class_teacher = Teacher.objects.get(
-                        school=school,
-                        first_name__iexact=teacher_name_parts[0],
-                        last_name__iexact=teacher_name_parts[-1],
-                    )
                     classroom = ClassRoom(
                         school=school,
                         name=name,
@@ -391,6 +402,7 @@ class BulkUploadStudentClassView(APIView):
             "stream_name",
             "academic_year",
             "student_full_name",
+            "student_admission_number",
         ]
         rows_with_errors = []
         student_classes_to_create = []
@@ -403,27 +415,39 @@ class BulkUploadStudentClassView(APIView):
                     stream_name = text_value(row_data["stream_name"]).upper()
                     year_name = text_value(row_data["academic_year"])
                     full_name = text_value(row_data["student_full_name"]).lower()
-                    if not all((classroom_name, stream_name, year_name, full_name)):
+                    admission_number = text_value(
+                        row_data["student_admission_number"]
+                    )
+                    if not all((classroom_name, stream_name, year_name)) or not (
+                        full_name or admission_number
+                    ):
                         raise ValueError(
-                            "Classroom, stream, academic year, and student are required."
+                            "Classroom, stream, academic year, and student name or admission number are required."
                         )
                     classroom = ClassRoom.objects.get(
                         school=school,
                         name__name__iexact=classroom_name,
                         stream__name__iexact=stream_name,
                     )
-                    academic_year = AcademicYear.objects.get(name__iexact=year_name)
-                    name_parts = full_name.split()
-                    if len(name_parts) < 2:
-                        raise ValueError(
-                            "Student full name must include first and last names."
-                        )
-                    first_name, last_name = name_parts[0], name_parts[-1]
-                    student = Student.objects.get(
-                        school=school,
-                        first_name__iexact=first_name,
-                        last_name__iexact=last_name,
+                    academic_year = AcademicYear.objects.get(
+                        school=school, name__iexact=year_name
                     )
+                    if admission_number:
+                        student = Student.objects.get(
+                            school=school, admission_number=admission_number
+                        )
+                    else:
+                        name_parts = full_name.split()
+                        if len(name_parts) < 2:
+                            raise ValueError(
+                                "Student full name must include first and last names."
+                            )
+                        first_name, last_name = name_parts[0], name_parts[-1]
+                        student = Student.objects.get(
+                            school=school,
+                            first_name__iexact=first_name,
+                            last_name__iexact=last_name,
+                        )
                     if classroom.name != student.class_level:
                         raise ValueError(
                             "The classroom does not match the student's class level."
@@ -487,3 +511,105 @@ class BulkUploadStudentClassView(APIView):
                 {"error": f"Invalid Excel file: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class SubjectsExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        subjects = Subject.objects.filter(school=school).select_related("department")
+        rows = (
+            (subject.name, subject.subject_code, subject.department.name if subject.department else "")
+            for subject in subjects
+        )
+        return excel_response(
+            "subjects.xlsx",
+            "Subjects",
+            ["name", "subject_code", "department"],
+            rows,
+        )
+
+
+class ClassRoomsExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        classrooms = ClassRoom.objects.filter(school=school).select_related(
+            "name", "stream", "class_teacher"
+        )
+        rows = (
+            (
+                classroom.name.name,
+                classroom.stream.name,
+                (
+                    classroom.class_teacher.empId
+                    or f"{classroom.class_teacher.first_name} {classroom.class_teacher.last_name}".strip()
+                ),
+            )
+            for classroom in classrooms
+        )
+        return excel_response(
+            "classrooms.xlsx",
+            "Classrooms",
+            ["name", "stream", "class_teacher"],
+            rows,
+        )
+
+
+class StudentClassesExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        enrollments = StudentClass.objects.filter(school=school).select_related(
+            "classroom__name",
+            "classroom__stream",
+            "academic_year",
+            "student",
+        )
+        rows = (
+            (
+                enrollment.classroom.name.name,
+                enrollment.classroom.stream.name,
+                enrollment.academic_year.name,
+                enrollment.student.full_name if enrollment.student else "",
+                (
+                    enrollment.student.admission_number
+                    if enrollment.student
+                    else ""
+                ),
+            )
+            for enrollment in enrollments
+        )
+        return excel_response(
+            "student_classes.xlsx",
+            "Student Classes",
+            [
+                "classroom_name",
+                "stream_name",
+                "academic_year",
+                "student_full_name",
+                "student_admission_number",
+            ],
+            rows,
+        )

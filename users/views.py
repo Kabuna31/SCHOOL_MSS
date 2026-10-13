@@ -2,6 +2,7 @@ import openpyxl
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.contrib.auth.models import Group
+from django.core.validators import validate_email
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import FilterSet, CharFilter, DjangoFilterBackend
 from rest_framework import views
@@ -13,7 +14,13 @@ from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from utils.bulk_imports import date_value, get_request_school, iter_excel_rows, text_value
+from utils.bulk_imports import (
+    date_value,
+    excel_response,
+    get_request_school,
+    iter_excel_rows,
+    text_value,
+)
 
 from academic.models import Teacher, Subject, Parent
 from .models import CustomUser as User, Accountant
@@ -89,38 +96,162 @@ class ParentFilter(FilterSet):
         ]
 
 
+def _school_user_queryset(request):
+    school = get_request_school(request)
+    users = User.objects.filter(is_parent=False)
+    if school is None:
+        return users.none()
+    return users.filter(school=school)
+
+
 class UserListView(generics.ListCreateAPIView):
     serializer_class = UserSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = UserFilter
 
     def get_queryset(self):
-        return User.objects.filter(is_parent=False)
+        return _school_user_queryset(self.request)
 
     def create(self, request, *args, **kwargs):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        user = serializer.save(school=school)
         return Response(self.get_serializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class BulkUploadUsersView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        file = request.FILES.get("file")
+        if not file:
+            return Response(
+                {"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        columns = ["email", "first_name", "middle_name", "last_name"]
+        errors = []
+        created_count = 0
+        seen_emails = set()
+        try:
+            for row_number, user_data in iter_excel_rows(file, columns):
+                try:
+                    email = text_value(user_data["email"]).lower()
+                    first_name = text_value(user_data["first_name"])
+                    middle_name = text_value(user_data["middle_name"])
+                    last_name = text_value(user_data["last_name"])
+                    if not email:
+                        raise ValueError("Email is required.")
+                    validate_email(email)
+                    if email in seen_emails or User.objects.filter(
+                        email__iexact=email
+                    ).exists():
+                        raise ValueError("Email already exists in this school or file.")
+
+                    with transaction.atomic():
+                        user = User(
+                            email=email,
+                            first_name=first_name,
+                            middle_name=middle_name,
+                            last_name=last_name,
+                            school=school,
+                        )
+                        user.set_unusable_password()
+                        user.save()
+                    seen_emails.add(email)
+                    created_count += 1
+                except (ValueError, ValidationError, IntegrityError) as exc:
+                    errors.append(
+                        {"row": row_number, "data": user_data, "error": str(exc)}
+                    )
+
+            return Response(
+                {
+                    "message": f"{created_count} users successfully uploaded.",
+                    "not_created": errors,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except (
+            openpyxl.utils.exceptions.InvalidFileException,
+            OSError,
+            ValueError,
+        ) as exc:
+            return Response(
+                {"error": f"Invalid Excel file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class UsersExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        users = User.objects.filter(school=school, is_parent=False)
+        rows = (
+            (
+                user.email,
+                user.first_name,
+                user.middle_name,
+                user.last_name,
+                user.is_staff,
+                user.is_accountant,
+                user.is_teacher,
+                user.is_parent,
+            )
+            for user in users
+        )
+        return excel_response(
+            "users.xlsx",
+            "Users",
+            [
+                "email",
+                "first_name",
+                "middle_name",
+                "last_name",
+                "is_staff",
+                "is_accountant",
+                "is_teacher",
+                "is_parent",
+            ],
+            rows,
+        )
 
 
 class UserDetailView(views.APIView):
     permission_classes = [IsAuthenticated]
 
-    def get_object(self, pk):
-        try:
-            return User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            raise Http404
+    def get_object(self, request, pk):
+        return get_object_or_404(_school_user_queryset(request), pk=pk)
 
     def get(self, request, pk, format=None):
-        user = self.get_object(pk)
-        print(user)
+        user = self.get_object(request, pk)
         serializer = UserSerializer(user)
         return Response(serializer.data)
 
     def put(self, request, pk, format=None):
-        user = self.get_object(pk)
+        user = self.get_object(request, pk)
         serializer = UserSerializer(user, data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -128,7 +259,7 @@ class UserDetailView(views.APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk, format=None):
-        user = self.get_object(pk)
+        user = self.get_object(request, pk)
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -333,6 +464,7 @@ class BulkUploadTeachersView(APIView):
             "gender",
             "date_of_birth",
             "salary",
+            "email",
         ]
         not_created = []
         created_count = 0
@@ -354,7 +486,10 @@ class BulkUploadTeachersView(APIView):
                     if len(short_name) > 3:
                         raise ValueError("Short name must be at most 3 characters.")
 
-                    generated_email = f"{first_name}.{last_name}@hayatul.com"
+                    generated_email = (
+                        text_value(teacher_data["email"]).lower()
+                        or f"{first_name}.{last_name}@hayatul.com"
+                    )
                     if (
                         generated_email in seen_emails
                         or employment_id in seen_employee_ids
@@ -466,3 +601,55 @@ class BulkUploadTeachersView(APIView):
                 {"error": f"Invalid Excel file: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class TeachersExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = get_request_school(request)
+        if school is None:
+            return Response(
+                {"error": "Your account is not associated with a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        teachers = Teacher.objects.filter(school=school).prefetch_related(
+            "subject_specialization"
+        )
+        rows = (
+            (
+                teacher.first_name,
+                teacher.middle_name,
+                teacher.last_name,
+                teacher.phone_number,
+                teacher.empId,
+                teacher.short_name,
+                ", ".join(subject.name for subject in teacher.subject_specialization.all()),
+                teacher.address,
+                teacher.gender,
+                teacher.date_of_birth,
+                teacher.salary,
+                teacher.email,
+            )
+            for teacher in teachers
+        )
+        return excel_response(
+            "teachers.xlsx",
+            "Teachers",
+            [
+                "first_name",
+                "middle_name",
+                "last_name",
+                "phone_number",
+                "employment_id",
+                "short_name",
+                "subject_specialization",
+                "address",
+                "gender",
+                "date_of_birth",
+                "salary",
+                "email",
+            ],
+            rows,
+        )

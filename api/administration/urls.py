@@ -8,6 +8,7 @@ from administration.views import (
     TermDetailView,
     SchoolEventViewSet,
     SchoolEventBulkUploadView,
+    SchoolEventExportView,
     SchoolEventTemplateDownloadView,
 )
 
@@ -35,6 +36,11 @@ urlpatterns = [
         "school-events/bulk-upload/",
         SchoolEventBulkUploadView.as_view(),
         name="school-events-bulk-upload",
+    ),
+    path(
+        "school-events/export/",
+        SchoolEventExportView.as_view(),
+        name="school-events-export",
     ),
     path(
         "school-events/template-download/",

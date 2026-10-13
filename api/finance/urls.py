@@ -19,6 +19,7 @@ from finance.views import (
     UpdateAllUnrecordedDebtsView,
     UpdatePastDebtsView,
     ReceiptBulkUploadView,
+    ReceiptsExportView,
     download_receipt_template,
 )
 
@@ -67,6 +68,7 @@ urlpatterns = [
         ReceiptBulkUploadView.as_view(),
         name="receipt-bulk-upload",
     ),
+    path("receipts/export/", ReceiptsExportView.as_view(), name="receipt-export"),
     path(
         "receipts/template/",
         download_receipt_template,

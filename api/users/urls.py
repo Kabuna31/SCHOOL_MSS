@@ -6,6 +6,8 @@ from users.views import (
     getUserProfile,
     UserListView,
     UserDetailView,
+    BulkUploadUsersView,
+    UsersExportView,
     ParentListView,
     ParentDetailView,
     AccountantListView,
@@ -13,6 +15,7 @@ from users.views import (
     TeacherListView,
     TeacherDetailView,
     BulkUploadTeachersView,
+    TeachersExportView,
 )
 
 
@@ -21,6 +24,8 @@ urlpatterns = [
     path("login/", MyTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("profile/", getUserProfile, name="users-profile"),
     path("users/", UserListView.as_view(), name="users-list"),
+    path("users/bulk-upload/", BulkUploadUsersView.as_view(), name="users-bulk-upload"),
+    path("users/export/", UsersExportView.as_view(), name="users-export"),
     path("users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
     # teacher URLs
     path("teachers/", TeacherListView.as_view(), name="teacher-list-create"),
@@ -29,6 +34,7 @@ urlpatterns = [
         BulkUploadTeachersView.as_view(),
         name="teacher-bulk-upload",
     ),
+    path("teachers/export/", TeachersExportView.as_view(), name="teachers-export"),
     path("teachers/<int:pk>/", TeacherDetailView.as_view(), name="accountant-detail"),
     # Accountant URLs
     path("accountants/", AccountantListView.as_view(), name="accountant-list-create"),
