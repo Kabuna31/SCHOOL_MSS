@@ -1,7 +1,9 @@
 import logging
 import datetime
-from django.db import models
+from django.conf import settings
+from django.db import models, transaction
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from academic.models import Student, Teacher, ClassRoom, StudentClassEnrollment, Subject
 from administration.models import AcademicYear, Term, School
 from administration.managers import SchoolScopedManager
@@ -218,3 +220,145 @@ class MarksManagement(models.Model):
                 f"Points scored must be between 0 and {self.exam_name.out_of}."
             )
         super(MarksManagement, self).clean()
+
+    def _submission_is_locked(self, for_update=False):
+        if not all((self.school_id, self.exam_name_id, self.subject_id, self.student_id)):
+            return False
+        enrollment = self.student
+        submissions = MarksSubmission.unfiltered_objects.filter(
+            school_id=self.school_id,
+            exam_id=self.exam_name_id,
+            classroom_id=enrollment.classroom_id,
+            subject_id=self.subject_id,
+            status__in=(
+                MarksSubmission.Status.SUBMITTED,
+                MarksSubmission.Status.APPROVED,
+                MarksSubmission.Status.RELEASED,
+            ),
+        )
+        if for_update:
+            return submissions.select_for_update().first() is not None
+        return submissions.exists()
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            if self._submission_is_locked(for_update=True):
+                raise ValidationError(
+                    "Marks cannot be changed while this submission is locked. "
+                    "An authorized administrator must reopen it first."
+                )
+            return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        with transaction.atomic():
+            if self._submission_is_locked(for_update=True):
+                raise ValidationError(
+                    "Marks cannot be deleted while this submission is locked. "
+                    "An authorized administrator must reopen it first."
+                )
+            return super().delete(*args, **kwargs)
+
+
+class MarksSubmission(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SUBMITTED = "submitted", "Submitted"
+        APPROVED = "approved", "Approved"
+        RELEASED = "released", "Released"
+
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, related_name="marks_submissions"
+    )
+    exam = models.ForeignKey(
+        ExaminationListHandler,
+        on_delete=models.CASCADE,
+        related_name="mark_submissions",
+    )
+    classroom = models.ForeignKey(
+        ClassRoom, on_delete=models.CASCADE, related_name="mark_submissions"
+    )
+    subject = models.ForeignKey(
+        Subject, on_delete=models.CASCADE, related_name="mark_submissions"
+    )
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.DRAFT, db_index=True
+    )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="marks_submitted",
+    )
+    submitted_at = models.DateTimeField(blank=True, null=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="marks_approved",
+    )
+    approved_at = models.DateTimeField(blank=True, null=True)
+    released_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = SchoolScopedManager()
+    unfiltered_objects = models.Manager()
+
+    class Meta:
+        ordering = ("exam__name", "classroom__name__name", "subject__name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("school", "exam", "classroom", "subject"),
+                name="unique_marks_submission_scope",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.exam} — {self.classroom} — {self.subject} ({self.status})"
+
+    def clean(self):
+        if (
+            self.exam_id
+            and self.classroom_id
+            and not self.exam.classrooms.filter(pk=self.classroom_id).exists()
+        ):
+            raise ValidationError(
+                {"classroom": "This exam is not assigned to the selected class."}
+            )
+        for related_object in (self.exam, self.classroom, self.subject):
+            if related_object.school_id != self.school_id:
+                raise ValidationError(
+                    "The exam, class, subject, and submission must belong to one school."
+                )
+
+
+class MarksSubmissionEvent(models.Model):
+    class Action(models.TextChoices):
+        CREATED = "created", "Created"
+        SUBMITTED = "submitted", "Submitted"
+        APPROVED = "approved", "Approved"
+        RELEASED = "released", "Released"
+        REOPENED = "reopened", "Reopened"
+
+    submission = models.ForeignKey(
+        MarksSubmission, on_delete=models.CASCADE, related_name="events"
+    )
+    action = models.CharField(max_length=12, choices=Action.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    note = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ("created_at", "pk")
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("Submission history entries are immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Submission history entries cannot be deleted.")

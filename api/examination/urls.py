@@ -3,6 +3,8 @@ from django.urls import path
 from examination.views import (
     MarksBulkUploadView,
     MarksExportView,
+    MarksSubmissionActionView,
+    MarksSubmissionListView,
     MarksheetView,
     MidTermReportCardsView,
     ReportCardsView,
@@ -13,6 +15,16 @@ from examination.views import (
 
 urlpatterns = [
     path("marks/bulk-upload/", MarksBulkUploadView.as_view(), name="marks-bulk-upload"),
+    path(
+        "marks/submissions/",
+        MarksSubmissionListView.as_view(),
+        name="marks-submissions",
+    ),
+    path(
+        "marks/submissions/<int:pk>/<str:action>/",
+        MarksSubmissionActionView.as_view(),
+        name="marks-submission-action",
+    ),
     path("marks/export/", MarksExportView.as_view(), name="marks-export"),
     path("reports/report-cards/", ReportCardsView.as_view(), name="report-cards"),
     path(

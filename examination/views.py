@@ -2,16 +2,19 @@ import openpyxl
 from django.core.exceptions import (
     MultipleObjectsReturned,
     ObjectDoesNotExist,
+    PermissionDenied,
     ValidationError,
 )
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import status
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from academic.models import (
+    AllocatedSubject,
     ClassRoom,
     Student,
     StudentClassEnrollment,
@@ -27,6 +30,7 @@ from utils.bulk_imports import (
     text_value,
 )
 from .models import ExaminationListHandler, MarksManagement
+from .models import MarksSubmission, MarksSubmissionEvent
 from .reports import (
     analysis_payload,
     analysis_pdf,
@@ -35,6 +39,15 @@ from .reports import (
     report_cards_pdf,
     report_scope,
 )
+from .serializers import (
+    MarksSubmissionActionSerializer,
+    MarksSubmissionListSerializer,
+    MarksSubmissionSelectionSerializer,
+    MarksSubmissionSerializer,
+)
+from .workflow import ensure_submission, submission_readiness, transition_submission
+from automation.models import Notification
+from automation.services import create_notification
 
 
 class ClassReportView(APIView):
@@ -42,7 +55,18 @@ class ClassReportView(APIView):
 
     def get_report_data(self, request, mid_term=False):
         school, term, classroom, student_id = report_scope(request)
-        return build_class_report(school, term, classroom, student_id, mid_term)
+        return build_class_report(
+            school,
+            term,
+            classroom,
+            student_id,
+            mid_term,
+            published_only=(
+                request.user.is_parent
+                and not request.user.is_staff
+                and not request.user.is_superuser
+            ),
+        )
 
 
 class ReportCardsView(ClassReportView):
@@ -71,6 +95,227 @@ class ResultAnalysisView(ClassReportView):
 class ResultAnalysisPDFView(ClassReportView):
     def get(self, request):
         return analysis_pdf(self.get_report_data(request))
+
+
+def _marks_workflow_scope(request, values):
+    school, exam, classroom = _marks_class_scope(
+        request, values["exam_id"], values["classroom_id"]
+    )
+    subject = Subject.objects.filter(
+        pk=values["subject_id"], school=school
+    ).first()
+    if subject is None:
+        raise NotFound("The subject was not found in your school.")
+    return school, exam, classroom, subject
+
+
+def _marks_class_scope(request, exam_id, classroom_id):
+    school = get_request_school(request)
+    if school is None:
+        raise PermissionDenied("Your account is not associated with a school.")
+    exam = (
+        ExaminationListHandler.objects.select_related("term__academic_year")
+        .filter(pk=exam_id, school=school)
+        .first()
+    )
+    classroom = ClassRoom.objects.filter(
+        pk=classroom_id, school=school
+    ).first()
+    if exam is None or classroom is None:
+        raise NotFound("The exam or class was not found in your school.")
+    if exam.term_id is None:
+        raise ValidationError("Marks workflow requires an exam assigned to a term.")
+    if not exam.classrooms.filter(pk=classroom.pk).exists():
+        raise ValidationError("The exam is not assigned to the selected class.")
+    return school, exam, classroom
+
+
+def _teacher_has_subject_scope(user, school, exam, classroom, subject):
+    if user.is_staff or user.is_superuser:
+        return True
+    teacher = Teacher.objects.filter(user=user, school=school).first()
+    if teacher is None:
+        return False
+    return AllocatedSubject.objects.filter(
+        school=school,
+        teacher_name=teacher,
+        class_room=classroom,
+        subject=subject,
+        academic_year=exam.term.academic_year,
+    ).filter(Q(term__isnull=True) | Q(term=exam.term)).exists()
+
+
+class MarksSubmissionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        params = MarksSubmissionListSerializer(
+            data={
+                "exam_id": request.query_params.get("exam_id"),
+                "classroom_id": request.query_params.get("classroom_id"),
+            }
+        )
+        params.is_valid(raise_exception=True)
+        school, exam, classroom = _marks_class_scope(
+            request,
+            params.validated_data["exam_id"],
+            params.validated_data["classroom_id"],
+        )
+        subjects = Subject.objects.filter(school=school).order_by("name")
+        if not (request.user.is_staff or request.user.is_superuser):
+            teacher = Teacher.objects.filter(user=request.user, school=school).first()
+            if teacher is None:
+                raise PermissionDenied(
+                    "Only an assigned teacher or school administrator can view marks readiness."
+                )
+            subjects = subjects.filter(
+                allocated_subjects__teacher_name=teacher,
+                allocated_subjects__class_room=classroom,
+                allocated_subjects__academic_year=exam.term.academic_year,
+            ).distinct()
+        results = []
+        for subject in subjects:
+            if not _teacher_has_subject_scope(
+                request.user, school, exam, classroom, subject
+            ):
+                continue
+            submission = MarksSubmission.objects.filter(
+                school=school,
+                exam=exam,
+                classroom=classroom,
+                subject=subject,
+            ).first()
+            probe = submission or MarksSubmission(
+                school=school,
+                exam=exam,
+                classroom=classroom,
+                subject=subject,
+            )
+            results.append(
+                {
+                    **(
+                        MarksSubmissionSerializer(submission).data
+                        if submission
+                        else {
+                            "id": None,
+                            "exam": exam.pk,
+                            "exam_name": exam.name,
+                            "classroom": classroom.pk,
+                            "classroom_name": str(classroom),
+                            "subject": subject.pk,
+                            "subject_name": subject.name,
+                            "status": "not_started",
+                            "submitted_at": None,
+                            "approved_at": None,
+                            "released_at": None,
+                        }
+                    ),
+                    "readiness": submission_readiness(probe),
+                }
+            )
+        return Response(results)
+
+    def post(self, request):
+        params = MarksSubmissionSelectionSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        school, exam, classroom, subject = _marks_workflow_scope(
+            request, params.validated_data
+        )
+        if not _teacher_has_subject_scope(
+            request.user, school, exam, classroom, subject
+        ):
+            raise PermissionDenied(
+                "You are not assigned to enter marks for this class and subject."
+            )
+        submission = ensure_submission(
+            school, exam, classroom, subject, request.user
+        )
+        submission, _ = transition_submission(
+            submission.pk,
+            school,
+            MarksSubmissionEvent.Action.SUBMITTED,
+            request.user,
+        )
+        return Response(
+            {
+                **MarksSubmissionSerializer(submission).data,
+                "readiness": submission_readiness(submission),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class MarksSubmissionActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk, action):
+        school = get_request_school(request)
+        if school is None:
+            raise PermissionDenied("Your account is not associated with a school.")
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied(
+                "Only a school administrator can approve, release, or reopen marks."
+            )
+        action_map = {
+            "approve": MarksSubmissionEvent.Action.APPROVED,
+            "release": MarksSubmissionEvent.Action.RELEASED,
+            "reopen": MarksSubmissionEvent.Action.REOPENED,
+        }
+        event_action = action_map.get(action)
+        if event_action is None:
+            raise NotFound("The requested marks workflow action does not exist.")
+        serializer = MarksSubmissionActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            submission, event = transition_submission(
+                pk,
+                school,
+                event_action,
+                request.user,
+                serializer.validated_data.get("note", ""),
+            )
+        except MarksSubmission.DoesNotExist as exc:
+            raise NotFound("Marks submission not found.") from exc
+        if event_action == MarksSubmissionEvent.Action.RELEASED:
+            tenant_prefix = request.path.split("/api/", maxsplit=1)[0]
+            report_path = (
+                f"{tenant_prefix}/api/examination/reports/report-cards/"
+                if tenant_prefix
+                else "/api/examination/reports/report-cards/"
+            )
+            enrollments = StudentClassEnrollment.objects.filter(
+                school=school,
+                classroom=submission.classroom,
+                academic_year=submission.exam.term.academic_year,
+                student__isnull=False,
+                student__school=school,
+                student__parent_guardian__user__isnull=False,
+            ).select_related("student", "student__parent_guardian__user")
+            for enrollment in enrollments:
+                student = enrollment.student
+                parent_user = student.parent_guardian.user
+                create_notification(
+                    school=school,
+                    recipient=parent_user,
+                    category=Notification.Category.ACADEMIC,
+                    title="Marks have been released",
+                    message=(
+                        f"{student.full_name}'s {submission.subject.name} marks for "
+                        f"{submission.exam.name} are now available in the report card: "
+                        f"{report_path}?term_id="
+                        f"{submission.exam.term_id}&classroom_id="
+                        f"{submission.classroom_id}&student_id={student.pk}"
+                    ),
+                    idempotency_key=f"marks-release:{event.pk}:{parent_user.pk}",
+                )
+        return Response(
+            {
+                **MarksSubmissionSerializer(submission).data,
+                "history_entry": event.pk,
+            }
+        )
 
 
 class MarksBulkUploadView(APIView):

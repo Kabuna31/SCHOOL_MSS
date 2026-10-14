@@ -119,6 +119,43 @@ Render, use `python manage.py migrate_deployment` as the release/pre-deploy
 command and `gunicorn school.wsgi:application --bind 0.0.0.0:$PORT` as the
 web start command; do not chain migrations into the web start command.
 
+### Notifications and delivery outbox
+
+Authenticated users can view their school-scoped in-app notifications at
+`/api/notifications/`, mark one or all as read, and manage email/SMS opt-ins at
+`/api/notifications/preferences/`. With tenant routing enabled, prepend the
+tenant path, for example `/t/school-slug/api/notifications/`. Email and SMS are
+opt-in and require `EMAIL_HOST`, `DEFAULT_FROM_EMAIL`,
+`AFRICASTALKING_USERNAME`, and `AFRICASTALKING_API_KEY` as appropriate; never
+store provider credentials in source control.
+
+The outbox is processed by `python manage.py process_notification_outbox`.
+Configure a Render Cron Job to run that command regularly after the database
+migrations have completed. Failed sends are recorded and retried with
+increasing delays.
+
+Configure a second daily Render Cron Job to run
+`python manage.py run_school_automation`. The command creates enabled
+attendance, fee, and event notifications before the outbox job delivers opted-in
+email and SMS. In tenant mode, both commands iterate provisioned school schemas;
+otherwise they use the legacy shared schema. Use `--school-id <id>` to test one
+school and `--date YYYY-MM-DD` to run the automation rules against a chosen
+date. Automation and each reminder category are disabled by default; enable
+them per school in the Django admin only after reviewing attendance data,
+parent contacts, term dates, and notification preferences.
+
+Attendance reminders require the configured number of consecutive weekday
+records in which every recorded period is marked absent. Weekends and school
+events of type Holiday are skipped; excused absences are not counted. Fee
+reminders start on the term start date and repeat at the configured interval
+while the balance remains unpaid. School-event reminders are sent the
+configured number of days before the event start date; examination reminders
+use the same lead time and go to parents of learners in the exam's assigned
+classes. Optional timetable checks report overlapping periods for a teacher or
+classroom to school staff once per day until the conflict is corrected. These
+rules create in-app notifications; email and SMS are sent only when each
+recipient opts in.
+
 Authentication and user identities remain shared in the public schema.
 Academic, attendance, examination, finance, notes, schedule, and SIS models are
 created in tenant schemas. The administration app is present in both schemas:
@@ -126,6 +163,27 @@ the public `School` record is the tenant registry source, and provisioning
 copies its school metadata and weekdays into the school schema. Keep tenant
 routing disabled until a school schema is provisioned and tenant login,
 permissions, and school-data isolation have been tested on PostgreSQL.
+
+### Marks review and report release
+
+Marks can be submitted for review by exam, class, and subject at
+`POST /api/examination/marks/submissions/` with `exam_id`, `classroom_id`, and
+`subject_id`. The submission is accepted only when each learner enrolled in
+the class has exactly one score. Teachers must be allocated to that class and
+subject; school staff can review readiness and submit on behalf of a teacher.
+Readiness and current submission states are available at
+`GET /api/examination/marks/submissions/?exam_id=<id>&classroom_id=<id>`.
+
+School staff advance a submission through
+`POST /api/examination/marks/submissions/<id>/approve/` and
+`POST /api/examination/marks/submissions/<id>/release/`. Marks are locked from
+submission until an authorized staff member explicitly reopens them with
+`POST /api/examination/marks/submissions/<id>/reopen/`; every transition is
+recorded in a read-only audit history. Reports exclude marks attached to
+unreleased submissions. Release creates an in-app academic notification for
+the learner's linked parent/guardian, and parents can open the linked
+student-specific report card after marks have been released. Existing marks
+without a workflow submission remain available to staff as legacy data.
 
 ### School Excel bulk import and export
 

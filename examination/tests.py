@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -14,9 +15,10 @@ from academic.models import (
     Teacher,
 )
 from administration.models import AcademicYear, School, Term
+from automation.models import Notification
 from users.models import CustomUser
 
-from .models import ExaminationListHandler, MarksManagement
+from .models import ExaminationListHandler, MarksManagement, MarksSubmission
 from .reports import _class_band, _grade_for, build_class_report
 
 
@@ -216,6 +218,172 @@ class ClassReportsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["class_average"], 72)
+
+    def test_unreleased_submission_marks_are_excluded_from_reports(self):
+        MarksSubmission.objects.create(
+            school=self.school,
+            exam=self.eot,
+            classroom=self.classroom,
+            subject=self.subject,
+        )
+
+        response = self.client.get(self.report_url("result-analysis"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["class_average"])
+        self.assertEqual(response.data["subjects"][0]["students_completed"], 0)
+
+    def test_marks_submission_requires_complete_scores_then_approves_and_releases(self):
+        second_student = Student.objects.create(
+            school=self.school,
+            first_name="Sam",
+            last_name="Student",
+            admission_number="S002",
+            parent_contact="1000003",
+        )
+        second_enrollment = StudentClassEnrollment.objects.create(
+            school=self.school,
+            classroom=self.classroom,
+            academic_year=self.academic_year,
+            student=second_student,
+        )
+        submission_url = reverse("marks-submissions")
+        selection = {
+            "exam_id": self.aoi.pk,
+            "classroom_id": self.classroom.pk,
+            "subject_id": self.subject.pk,
+        }
+
+        response = self.client.post(submission_url, selection, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        submission = MarksSubmission.objects.get(
+            exam=self.aoi,
+            classroom=self.classroom,
+            subject=self.subject,
+        )
+        self.assertEqual(submission.status, MarksSubmission.Status.DRAFT)
+        self.assertIn("readiness", response.data["detail"], response.data)
+        self.assertEqual(
+            response.data["detail"]["readiness"]["missing_admission_numbers"],
+            ["S002"],
+        )
+
+        MarksManagement.objects.create(
+            school=self.school,
+            exam_name=self.aoi,
+            points_scored=75,
+            subject=self.subject,
+            student=second_enrollment,
+            created_by=self.teacher,
+        )
+        response = self.client.post(submission_url, selection, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], MarksSubmission.Status.SUBMITTED)
+        with self.assertRaisesMessage(ValidationError, "submission is locked"):
+            mark = MarksManagement.objects.get(
+                exam_name=self.aoi,
+                subject=self.subject,
+                student=self.enrollment,
+            )
+            mark.points_scored = 81
+            mark.save()
+
+        action_url = reverse(
+            "marks-submission-action",
+            kwargs={"pk": submission.pk, "action": "approve"},
+        )
+        response = self.client.post(action_url, {}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], MarksSubmission.Status.APPROVED)
+
+        parent_client = APIClient()
+        parent_client.force_authenticate(self.student.parent_guardian.user)
+        parent_report_url = reverse("report-cards")
+        report_params = {
+            "term_id": self.term.pk,
+            "classroom_id": self.classroom.pk,
+            "student_id": self.student.pk,
+        }
+        self.assertEqual(
+            parent_client.get(parent_report_url, report_params).status_code, 403
+        )
+
+        action_url = reverse(
+            "marks-submission-action",
+            kwargs={"pk": submission.pk, "action": "release"},
+        )
+        response = self.client.post(action_url, {}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], MarksSubmission.Status.RELEASED)
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.student.parent_guardian.user,
+                category=Notification.Category.ACADEMIC,
+                title="Marks have been released",
+            ).exists()
+        )
+
+        parent_response = parent_client.get(parent_report_url, report_params)
+        self.assertEqual(parent_response.status_code, 200)
+        self.assertEqual(parent_response["Content-Type"], "application/pdf")
+
+    def test_only_school_staff_can_approve_and_reopen_is_audited(self):
+        submission = MarksSubmission.objects.create(
+            school=self.school,
+            exam=self.aoi,
+            classroom=self.classroom,
+            subject=self.subject,
+            status=MarksSubmission.Status.SUBMITTED,
+            submitted_by=self.user,
+        )
+        non_staff = CustomUser.objects.create_user(
+            email="teacher@example.test",
+            password="Example-pass-123!",
+            school=self.school,
+            is_staff=False,
+        )
+        self.client.force_authenticate(non_staff)
+        action_url = reverse(
+            "marks-submission-action",
+            kwargs={"pk": submission.pk, "action": "approve"},
+        )
+
+        response = self.client.post(action_url, {}, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            MarksSubmission.objects.get(pk=submission.pk).status,
+            MarksSubmission.Status.SUBMITTED,
+        )
+
+        self.client.force_authenticate(self.user)
+        response = self.client.post(action_url, {}, format="json")
+        self.assertEqual(response.status_code, 200)
+        reopen_url = reverse(
+            "marks-submission-action",
+            kwargs={"pk": submission.pk, "action": "reopen"},
+        )
+        response = self.client.post(
+            reopen_url, {"note": "Correction required."}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        submission.refresh_from_db()
+        self.assertEqual(submission.status, MarksSubmission.Status.DRAFT)
+        self.assertEqual(
+            list(submission.events.values_list("action", flat=True)),
+            ["approved", "reopened"],
+        )
+        mark = MarksManagement.objects.get(
+            exam_name=self.aoi,
+            subject=self.subject,
+            student=self.enrollment,
+        )
+        mark.points_scored = 79
+        mark.save()
 
     def test_admin_marks_sheet_prefills_and_saves_marks_for_the_class(self):
         self.log_in_as_admin()

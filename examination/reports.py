@@ -5,6 +5,7 @@ from statistics import mean
 from xml.sax.saxutils import escape
 
 from django.core.exceptions import PermissionDenied
+from django.db.models import Exists, OuterRef
 from django.http import HttpResponse
 from django.utils.text import slugify
 from reportlab.lib import colors
@@ -22,13 +23,19 @@ from reportlab.platypus import (
     TableStyle,
 )
 from rest_framework import serializers
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied as APIForbidden, ValidationError
 
-from academic.models import AllocatedSubject, ClassRoom, StudentClassEnrollment, Teacher
+from academic.models import (
+    AllocatedSubject,
+    ClassRoom,
+    Student,
+    StudentClassEnrollment,
+    Teacher,
+)
 from administration.models import Term
 from utils.bulk_imports import get_request_school
 
-from .models import MarksManagement
+from .models import MarksManagement, MarksSubmission
 
 
 O_LEVEL_BANDS = (
@@ -114,6 +121,27 @@ def report_scope(request):
     if request.user.is_staff or request.user.is_superuser:
         return school, term, classroom, values.get("student_id")
 
+    requested_student_id = values.get("student_id")
+    if request.user.is_parent and requested_student_id is not None and Student.objects.filter(
+        pk=requested_student_id,
+        school=school,
+        parent_guardian__user=request.user,
+        student_classes__classroom=classroom,
+        student_classes__academic_year=term.academic_year,
+    ).exists():
+        has_released_marks = MarksSubmission.unfiltered_objects.filter(
+            school=school,
+            classroom=classroom,
+            exam__term=term,
+            status=MarksSubmission.Status.RELEASED,
+            exam__exam_marks__student__student_id=requested_student_id,
+            exam__exam_marks__student__classroom=classroom,
+            exam__exam_marks__student__academic_year=term.academic_year,
+        ).exists()
+        if has_released_marks:
+            return school, term, classroom, requested_student_id
+        raise APIForbidden("The student's marks have not been released.")
+
     teacher = Teacher.objects.filter(user=request.user, school=school).first()
     if teacher is None or not (
         classroom.class_teacher_id == teacher.pk
@@ -124,13 +152,18 @@ def report_scope(request):
             academic_year=term.academic_year,
         ).exists()
     ):
-        raise PermissionDenied("You are not authorized to view reports for this class.")
+        raise APIForbidden("You are not authorized to view reports for this class.")
 
     return school, term, classroom, values.get("student_id")
 
 
 def build_class_report(
-    school, term, classroom, requested_student_id=None, mid_term=False
+    school,
+    term,
+    classroom,
+    requested_student_id=None,
+    mid_term=False,
+    published_only=False,
 ):
     band = _class_band(classroom.name.name)
     enrollments = list(
@@ -160,14 +193,35 @@ def build_class_report(
         ]
 
     enrollment_ids = [enrollment.pk for enrollment in enrollments]
-    marks = list(
-        MarksManagement.objects.filter(
+    unreleased_submissions = MarksSubmission.unfiltered_objects.filter(
+        school=school,
+        exam_id=OuterRef("exam_name_id"),
+        classroom=classroom,
+        subject_id=OuterRef("subject_id"),
+    ).exclude(status=MarksSubmission.Status.RELEASED)
+    marks_queryset = MarksManagement.objects.filter(
+        school=school,
+        student_id__in=enrollment_ids,
+        exam_name__term=term,
+        exam_name__classrooms=classroom,
+    )
+    if published_only:
+        released_submissions = MarksSubmission.unfiltered_objects.filter(
             school=school,
-            student_id__in=enrollment_ids,
-            exam_name__term=term,
-            exam_name__classrooms=classroom,
+            exam_id=OuterRef("exam_name_id"),
+            classroom=classroom,
+            subject_id=OuterRef("subject_id"),
+            status=MarksSubmission.Status.RELEASED,
         )
-        .select_related("exam_name", "subject", "student__student")
+        marks_queryset = marks_queryset.annotate(
+            has_released_submission=Exists(released_submissions)
+        ).filter(has_released_submission=True)
+    else:
+        marks_queryset = marks_queryset.annotate(
+            has_unreleased_submission=Exists(unreleased_submissions)
+        ).filter(has_unreleased_submission=False)
+    marks = list(
+        marks_queryset.select_related("exam_name", "subject", "student__student")
         .order_by("subject__name", "exam_name__assessment_type")
     )
 

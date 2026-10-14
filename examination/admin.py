@@ -21,6 +21,8 @@ from .models import (
     GradeScale,
     GradeScaleRule,
     MarksManagement,
+    MarksSubmission,
+    MarksSubmissionEvent,
     Result,
 )
 
@@ -61,6 +63,23 @@ class MarksManagementAdmin(admin.ModelAdmin):
         "subject__name",
     )
     change_list_template = "admin/examination/marksmanagement/change_list.html"
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj._submission_is_locked():
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj._submission_is_locked():
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if any(mark._submission_is_locked() for mark in queryset.iterator()):
+            raise ValidationError(
+                "Reopen the marks submission before deleting any locked marks."
+            )
+        super().delete_queryset(request, queryset)
 
     def get_urls(self):
         custom_urls = [
@@ -212,7 +231,8 @@ class MarksManagementAdmin(admin.ModelAdmin):
                 is_update = mark is not None
                 if is_update and not self.has_change_permission(request, mark):
                     errors.append(
-                        f"You do not have permission to update {enrollment.student}'s mark."
+                        f"You do not have permission to update {enrollment.student}'s mark, "
+                        "or the submission is locked."
                     )
                     continue
                 if not is_update and not self.has_add_permission(request):
@@ -304,3 +324,56 @@ class MarksManagementAdmin(admin.ModelAdmin):
             "admin/examination/marksmanagement/enter_marks.html",
             context,
         )
+
+
+@admin.register(MarksSubmission)
+class MarksSubmissionAdmin(admin.ModelAdmin):
+    list_display = (
+        "exam",
+        "classroom",
+        "subject",
+        "status",
+        "submitted_at",
+        "approved_at",
+        "released_at",
+        "school",
+    )
+    list_filter = ("status", "exam__term", "school")
+    search_fields = ("exam__name", "classroom__name__name", "subject__name")
+    readonly_fields = (
+        "school",
+        "exam",
+        "classroom",
+        "subject",
+        "status",
+        "submitted_by",
+        "submitted_at",
+        "approved_by",
+        "approved_at",
+        "released_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MarksSubmissionEvent)
+class MarksSubmissionEventAdmin(admin.ModelAdmin):
+    list_display = ("submission", "action", "actor", "created_at")
+    list_filter = ("action", "created_at")
+    search_fields = ("submission__exam__name", "submission__subject__name", "note")
+    readonly_fields = ("submission", "action", "actor", "note", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

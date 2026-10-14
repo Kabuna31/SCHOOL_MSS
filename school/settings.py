@@ -57,6 +57,7 @@ LEGACY_INSTALLED_APPS = [
     "administration.apps.AdministrationConfig",
     "attendance.apps.AttendanceConfig",
     "examination.apps.ExaminationConfig",
+    "automation.apps.AutomationConfig",
     "finance.apps.FinanceConfig",
     "notes.apps.NotesConfig",
     "schedule.apps.ScheduleConfig",
@@ -75,6 +76,7 @@ SHARED_APPS = [
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
+    "automation.apps.AutomationConfig",
     "administration.apps.AdministrationConfig",
     "users.apps.UsersConfig",
 ]
@@ -267,6 +269,20 @@ SIMPLE_JWT = {
 # e.g. CORS_ALLOWED_ORIGINS=https://school.example.com,https://www.example.com
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+
+AFRICASTALKING_USERNAME = env("AFRICASTALKING_USERNAME", default="")
+AFRICASTALKING_API_KEY = env("AFRICASTALKING_API_KEY", default="")
+AFRICASTALKING_SENDER_ID = env("AFRICASTALKING_SENDER_ID", default="")
 
 AUTH_USER_MODEL = "users.CustomUser"
 
