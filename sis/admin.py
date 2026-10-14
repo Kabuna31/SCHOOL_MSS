@@ -57,24 +57,21 @@ class StudentResource(resources.ModelResource):
         export_order = fields
 
     def before_import_row(self, row, **kwargs):
-        # Student.save() raises if parent_contact is missing.
         if not row.get("parent_contact"):
             row["parent_contact"] = "UNKNOWN"
-        # Normalise gender (M/F) and religion (lowercase).
         if row.get("gender"):
             row["gender"] = str(row["gender"]).strip().upper()[:1]
         if row.get("religion"):
             row["religion"] = str(row["religion"]).strip().lower()
 
     def get_queryset(self):
-        # Bypass SchoolScopedManager during import/export so all schools' data
-        # is visible to superusers, but scope to the logged-in school otherwise.
         return Student.unfiltered_objects.all()
 
 
 @admin.register(Student)
 class StudentAdmin(ImportExportModelAdmin):
     resource_class = StudentResource
+    change_list_template = "admin/import_export/change_list_import_export.html"  # ← THE FIX
     list_display = (
         "admission_number",
         "first_name",
