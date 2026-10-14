@@ -7,6 +7,7 @@ from django.utils import translation
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from administration.models import School
+from finance.serializers import PaymentSerializer
 from users.models import CustomUser
 from users.views import UserDetailView, UserListView
 
@@ -61,6 +62,47 @@ class SchoolUserVisibilityTests(TestCase):
             {row["email"] for row in response.data},
             {self.user.email, self.school_user.email},
         )
+
+    def test_user_list_never_includes_superusers(self):
+        superuser = CustomUser.objects.create_superuser(
+            email="root@rockland.test",
+            password="test-password",
+            school=self.school,
+        )
+        request = self.request_as_user(self.factory.get("/users/"), self.user)
+
+        response = UserListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(
+            superuser.email,
+            {row["email"] for row in response.data},
+        )
+
+    def test_user_detail_hides_superusers(self):
+        superuser = CustomUser.objects.create_superuser(
+            email="root@rockland.test",
+            password="test-password",
+            school=self.school,
+        )
+        request = self.request_as_user(
+            self.factory.get(f"/users/{superuser.pk}/"), self.user
+        )
+
+        response = UserDetailView.as_view()(request, pk=superuser.pk)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_payment_user_dropdown_excludes_superusers(self):
+        superuser = CustomUser.objects.create_superuser(
+            email="root@rockland.test",
+            password="test-password",
+            school=self.school,
+        )
+
+        selectable_users = PaymentSerializer().fields["user_id"].queryset
+
+        self.assertFalse(selectable_users.filter(pk=superuser.pk).exists())
 
     def test_user_detail_cannot_read_another_schools_user(self):
         request = self.request_as_user(

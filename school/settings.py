@@ -66,6 +66,7 @@ LEGACY_INSTALLED_APPS = [
 ]
 
 SHARED_APPS = [
+    "import_export",
     "django_tenants",
     "tenants.apps.TenantsConfig",
     "django.contrib.contenttypes",
@@ -82,6 +83,7 @@ SHARED_APPS = [
 ]
 
 TENANT_APPS = [
+    "import_export",
     "jazzmin",
     "django.contrib.admin",
     "academic.apps.AcademicConfig",

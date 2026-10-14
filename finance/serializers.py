@@ -128,7 +128,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         queryset=Accountant.objects.all(), source="paid_by", write_only=True
     )
     user_id = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
+        queryset=CustomUser.objects.filter(is_superuser=False),
         source="user",
         write_only=True,
         required=False,

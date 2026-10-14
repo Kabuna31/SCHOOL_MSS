@@ -98,7 +98,7 @@ class ParentFilter(FilterSet):
 
 def _school_user_queryset(request):
     school = get_request_school(request)
-    users = User.objects.filter(is_parent=False)
+    users = User.objects.filter(is_parent=False, is_superuser=False)
     if school is None:
         return users.none()
     return users.filter(school=school)
@@ -208,7 +208,11 @@ class UsersExportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        users = User.objects.filter(school=school, is_parent=False)
+        users = User.objects.filter(
+            school=school,
+            is_parent=False,
+            is_superuser=False,
+        )
         rows = (
             (
                 user.email,
