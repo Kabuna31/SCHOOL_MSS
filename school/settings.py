@@ -43,6 +43,7 @@ DATE_VALIDATORS = [MinValueValidator(date(1970, 1, 1))]
 # Application definition
 # ---------------------------------------------------------------------------
 LEGACY_INSTALLED_APPS = [
+    "import_export",
     "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
