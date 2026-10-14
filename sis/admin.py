@@ -4,6 +4,7 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 
 from academic.models import *
+from school.admin_utils import enable_import_export
 
 
 # ---------- Student ----------
@@ -71,7 +72,7 @@ class StudentResource(resources.ModelResource):
 @admin.register(Student)
 class StudentAdmin(ImportExportModelAdmin):
     resource_class = StudentResource
-    change_list_template = "admin/import_export/change_list_import_export.html"  # ← THE FIX
+    change_list_template = "admin/import_export/change_list_import_export.html"
     list_display = (
         "admission_number",
         "first_name",
@@ -85,10 +86,41 @@ class StudentAdmin(ImportExportModelAdmin):
     list_filter = ("school", "class_level", "class_of_year", "gender", "religion")
 
 
-# ---------- Other models (unchanged) ----------
-admin.site.register(ReasonLeft)
-admin.site.register(StudentsPreviousAcademicHistory)
-admin.site.register(StudentFile)
-admin.site.register(StudentHealthRecord)
-admin.site.register(FamilyAccessUser)
-admin.site.register(Parent)
+# ---------- Parent (has a school FK — needs custom resource) ----------
+class ParentResource(resources.ModelResource):
+    school = fields.Field(
+        column_name="school",
+        attribute="school",
+        widget=ForeignKeyWidget(School, field="name"),
+    )
+
+    class Meta:
+        model = Parent
+        import_id_fields = ("phone_number",)
+        fields = (
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "school",
+        )
+        export_order = fields
+
+
+@admin.register(Parent)
+class ParentAdmin(ImportExportModelAdmin):
+    resource_class = ParentResource
+    change_list_template = "admin/import_export/change_list_import_export.html"
+    list_display = ("first_name", "last_name", "phone_number", "email", "school")
+    search_fields = ("first_name", "last_name", "phone_number", "email")
+    list_filter = ("school",)
+
+
+# ---------- Simple models: one-line import/export ----------
+enable_import_export(ReasonLeft)
+enable_import_export(StudentsPreviousAcademicHistory)
+enable_import_export(StudentFile)
+enable_import_export(StudentHealthRecord)
+enable_import_export(FamilyAccessUser)

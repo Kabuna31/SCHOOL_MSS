@@ -7,6 +7,11 @@ from django.shortcuts import render
 from django.urls import path, reverse
 from django.utils.http import urlencode
 
+from import_export import resources, fields
+from import_export.admin import ImportExportModelAdmin
+from import_export.widgets import ForeignKeyWidget
+from school.admin_utils import enable_import_export
+
 from academic.models import (
     ClassRoom,
     StudentClassEnrollment,
@@ -26,13 +31,40 @@ from .models import (
     Result,
 )
 
-admin.site.register(GradeScale)
-admin.site.register(GradeScaleRule)
-admin.site.register(Result)
+
+# ---------- Simple models: one-line import/export ----------
+enable_import_export(GradeScale)
+enable_import_export(GradeScaleRule)
+enable_import_export(Result)
+
+
+# ---------- ExaminationListHandler ----------
+class ExaminationListHandlerResource(resources.ModelResource):
+    term = fields.Field(
+        column_name="term",
+        attribute="term",
+        widget=ForeignKeyWidget(Term, field="name"),
+    )
+
+    class Meta:
+        model = ExaminationListHandler
+        import_id_fields = ("name", "term")
+        fields = (
+            "id",
+            "name",
+            "term",
+            "assessment_type",
+            "out_of",
+            "start_date",
+            "ends_date",
+            "school",
+        )
 
 
 @admin.register(ExaminationListHandler)
-class ExaminationListHandlerAdmin(admin.ModelAdmin):
+class ExaminationListHandlerAdmin(ImportExportModelAdmin):
+    resource_class = ExaminationListHandlerResource
+    change_list_template = "admin/import_export/change_list_import_export.html"
     list_display = (
         "name",
         "term",
@@ -46,8 +78,46 @@ class ExaminationListHandlerAdmin(admin.ModelAdmin):
     filter_horizontal = ("classrooms",)
 
 
+# ---------- MarksManagement (import/export + custom "Enter marks" view) ----------
+class MarksManagementResource(resources.ModelResource):
+    student = fields.Field(
+        column_name="student",
+        attribute="student",
+        widget=ForeignKeyWidget(StudentClassEnrollment, field="id"),
+    )
+    subject = fields.Field(
+        column_name="subject",
+        attribute="subject",
+        widget=ForeignKeyWidget(Subject, field="name"),
+    )
+    exam_name = fields.Field(
+        column_name="exam_name",
+        attribute="exam_name",
+        widget=ForeignKeyWidget(ExaminationListHandler, field="name"),
+    )
+    created_by = fields.Field(
+        column_name="created_by",
+        attribute="created_by",
+        widget=ForeignKeyWidget(Teacher, field="id"),
+    )
+
+    class Meta:
+        model = MarksManagement
+        import_id_fields = ("student", "subject", "exam_name")
+        fields = (
+            "id",
+            "exam_name",
+            "student",
+            "subject",
+            "points_scored",
+            "created_by",
+            "school",
+        )
+
+
 @admin.register(MarksManagement)
-class MarksManagementAdmin(admin.ModelAdmin):
+class MarksManagementAdmin(ImportExportModelAdmin):
+    resource_class = MarksManagementResource
     list_display = (
         "exam_name",
         "student",
