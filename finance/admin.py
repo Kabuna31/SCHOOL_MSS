@@ -21,8 +21,19 @@ class PaymentResource(resources.ModelResource):
     class Meta:
         model = Payment
         import_id_fields = ("id",)
-        fields = "__all__"
-        export_order = fields
+        fields = (
+            "id",
+            "school",
+            "payment_number",
+            "date",
+            "paid_to",
+            "user",
+            "paid_for",
+            "paid_through",
+            "amount",
+            "status",
+            "paid_by",
+        )
 
 
 @admin.register(Payment)
@@ -45,8 +56,21 @@ class ReceiptResource(resources.ModelResource):
     class Meta:
         model = Receipt
         import_id_fields = ("id",)
-        fields = "__all__"
-        export_order = fields
+        fields = (
+            "id",
+            "school",
+            "receipt_number",
+            "date",
+            "payer",
+            "paid_for",
+            "student",
+            "amount",
+            "paid_through",
+            "term",
+            "payment_date",
+            "status",
+            "received_by",
+        )
 
 
 @admin.register(Receipt)
@@ -55,29 +79,6 @@ class ReceiptAdmin(ImportExportModelAdmin):
     change_list_template = "admin/import_export/change_list_import_export.html"
 
 
-# ---------- PaymentAllocation ----------
-class PaymentAllocationResource(resources.ModelResource):
-    class Meta:
-        model = PaymentAllocation
-        import_id_fields = ("id",)
-        fields = "__all__"
-
-
-@admin.register(PaymentAllocation)
-class PaymentAllocationAdmin(ImportExportModelAdmin):
-    resource_class = PaymentAllocationResource
-    change_list_template = "admin/import_export/change_list_import_export.html"
-
-
-# ---------- ReceiptAllocation ----------
-class ReceiptAllocationResource(resources.ModelResource):
-    class Meta:
-        model = ReceiptAllocation
-        import_id_fields = ("id",)
-        fields = "__all__"
-
-
-@admin.register(ReceiptAllocation)
-class ReceiptAllocationAdmin(ImportExportModelAdmin):
-    resource_class = ReceiptAllocationResource
-    change_list_template = "admin/import_export/change_list_import_export.html"
+# ---------- Allocations (simple) ----------
+enable_import_export(PaymentAllocation)
+enable_import_export(ReceiptAllocation)
